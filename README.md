@@ -26,4 +26,10 @@ TBD
 TBD
 
 ## License
-TBD
+
+CoverageX is licensed under the Functional Source License, Version 1.1, with
+Apache-2.0 as the future license. See `LICENSE.md` for the full license text.
+
+The license allows use for any permitted purpose other than a competing use.
+Commercial, internal, evaluation, educational, research, and professional
+services use may be allowed when it does not compete with CoverageX.
