@@ -1,20 +1,59 @@
 ---
 name: Feature request
-about: Suggest an idea for this project
-title: "[FEATURE]"
-labels: ''
+about: Suggest a CoverageX capability, report improvement, integration, or analysis enhancement
+title: "[FEATURE] "
+labels: enhancement
 assignees: ''
 
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+## Summary
+Briefly describe the feature.
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+## Problem
+What coverage or testing problem would this solve?
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
+## Proposed Solution
+Describe the behavior you would like CoverageX to support.
 
-**Additional context**
-Add any other context or screenshots about the feature request here.
+## Area
+Select all that apply:
+- Maven plugin
+- Gradle plugin
+- JVM agent / instrumentation
+- Line coverage
+- Method coverage
+- Branch coverage
+- Invocation tracking
+- Parameter tracking
+- Over-coverage analysis
+- Insights / suggestions
+- Unloaded class detection
+- HTML report
+- CI integration
+- Export formats
+- Documentation
+- Other
+
+## Example Use Case
+Show how a team would use this in a real project, local workflow, or CI flow.
+
+## Desired Output
+If this affects reports, logs, configuration, or analysis output, describe or sketch the expected result.
+
+## Configuration Idea
+Optional: suggest what the Maven or Gradle configuration might look like.
+
+```xml
+<!-- Maven example -->
+```
+
+```gradle
+// Gradle example
+```
+
+## Alternatives Considered
+Any workaround, existing tool, or simpler version you considered.
+
+## Additional Context
+Links, screenshots, examples, or related issues.
