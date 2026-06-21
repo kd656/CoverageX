@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.coveragex</groupId>
+        <artifactId>coveragex</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>coveragex-test-fixtures-jdk25</artifactId>
+    <name>CoverageX Test Fixtures — JDK 25+</name>
+    <description>
+        Forward fixture module — holds fixtures whose source syntax requires JDK 25
+        or later, so the floor (JDK 21) row of the compatibility matrix can stay
+        green while the matrix grows coverage for newer language features.
+
+        Activated by the fixtures-jdk25 (or any later) Maven profile, which also
+        pulls in this module via the parent POM's profile module list. The
+        compat-tests module conditionally depends on the produced JAR under the
+        same profile.
+
+        Source floor: JDK 25. Per row, the module is recompiled with the row's
+        ${fixture.jdk} compiler (same invariant as the base fixtures module) so
+        a JDK 28 row exercises this module's bytecode emitted by JDK 28's javac.
+    </description>
+
+    <properties>
+        <fixture.min.jdk>25</fixture.min.jdk>
+    </properties>
+
+    <build>
+        <plugins>
+            <!--
+              Same template as coveragex-test-fixtures: pick the toolchain by
+              ${fixture.jdk}, fork compiler so the toolchain JDK runs javac, set
+              <release>${fixture.jdk}</release> so the bytecode targets the row JDK.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-toolchains-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution><goals><goal>toolchain</goal></goals></execution>
+                </executions>
+                <configuration>
+                    <toolchains>
+                        <jdk><version>${fixture.jdk}</version></jdk>
+                    </toolchains>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <fork>true</fork>
+                    <release>${fixture.jdk}</release>
+                </configuration>
+            </plugin>
+            <!--
+              Fail fast if this module is activated under a row JDK below its
+              source floor. See coveragex-test-fixtures-jdk22 POM for the
+              full rationale — same template, just floors at 25.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>fixture-min-jdk</id>
+                        <goals><goal>enforce</goal></goals>
+                        <configuration>
+                            <rules>
+                                <evaluateBeanshell>
+                                    <condition>Integer.parseInt("${fixture.jdk}") &gt;= Integer.parseInt("${fixture.min.jdk}")</condition>
+                                    <message>
+                                        Module coveragex-test-fixtures-jdk25 requires fixture.jdk &gt;= 25 (declared via fixture.min.jdk).
+                                        Current value: fixture.jdk=${fixture.jdk}. Activate this module only under
+                                        -Pfixtures-jdk25 or any cumulative-superset profile (fixtures-jdk28, ...).
+                                    </message>
+                                </evaluateBeanshell>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.coveragex</groupId>
+        <artifactId>coveragex</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>coveragex-compatibility-tests</artifactId>
+    <name>CoverageX Compatibility Tests</name>
+    <description>
+        Per-construct compatibility matrix tests. Runs each fixture in
+        coveragex-test-fixtures through the static planner (ProbePlanBuilder)
+        and, at runtime, the bytecode injector + collector, asserting per-fixture
+        contracts hold across every supported JDK row.
+
+        No coveragex-agent dependency — the runtime engine lives in coveragex-core
+        after the agent-engine relocation (PR 0b).
+
+        See documentation/coveragex-core-test-strategy.md (strategy) and
+        documentation/coveragex-core-test-strategy-impl.md (this module's helpers).
+    </description>
+
+    <dependencies>
+        <!--
+          coveragex-api comes transitively via coveragex-core. coveragex-core houses
+          ProbePlanBuilder, ClassTransformer, CommonCoverageDataCollector, and the
+          CoverageDataCollectorDelegate that injected bytecode calls into.
+        -->
+        <dependency>
+            <groupId>com.coveragex</groupId>
+            <artifactId>coveragex-core</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Compiled fixture .class files loaded via BytecodeFixtures.load(fqn). -->
+        <dependency>
+            <groupId>com.coveragex</groupId>
+            <artifactId>coveragex-test-fixtures</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JUnit 5 aggregator: bundles -api, -params, -engine since 5.4. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!--
+                      Run tests under the fixture JDK so the test JVM can load
+                      bytecode produced by the matching javac. Without this, a
+                      JDK 25 fixture would be rejected by a JDK 21 test JVM with
+                      UnsupportedClassVersionError.
+                    -->
+                    <jdkToolchain>
+                        <version>${fixture.jdk}</version>
+                    </jdkToolchain>
+                    <systemPropertyVariables>
+                        <!--
+                          Propagates the active matrix profile's fixture.jdk to the
+                          test JVM so @EnabledOnFixtureJdk and JdkVersion.current()
+                          can read it. Falls back to runtime feature() when unset.
+                        -->
+                        <fixture.jdk>${fixture.jdk}</fixture.jdk>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <!--
+      Forward-module wiring. Each profile mirrors the parent POM's <modules>
+      activation for the same id, adding here:
+        - a test-scope dependency on the forward fixture JAR (so its bytecode
+          is on the test classpath),
+        - profile-gated test source + resource roots that hold the matching
+          FixtureCatalogContributor + META-INF/services entry. These roots are
+          only added under the forward profile so the contributor class never
+          exists under the base profile — keeping FixtureCatalog.all() equal
+          to BaseFixtureCatalog.specs() by default.
+    -->
+    <profiles>
+        <profile>
+            <id>fixtures-jdk22</id>
+            <dependencies>
+                <dependency>
+                    <groupId>com.coveragex</groupId>
+                    <artifactId>coveragex-test-fixtures-jdk22</artifactId>
+                    <version>${project.version}</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-jdk22-test-sources</id>
+                                <phase>generate-test-sources</phase>
+                                <goals><goal>add-test-source</goal></goals>
+                                <configuration>
+                                    <sources>
+                                        <source>src/test/java-jdk22</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>fixtures-jdk25</id>
+            <!--
+              Cumulative: pulls in every earlier forward module's fixtures, deps,
+              and profile-gated source roots so a JDK 25 row exercises base +
+              JDK 22-era + JDK 25-era fixtures all compiled by JDK 25's javac.
+              Future fixtures-jdk28 inherits jdk22 + jdk25 + jdk28 the same way.
+
+              ServiceLoader META-INF/services entries ship inside each fixture
+              JAR (not in this module's resources) so the catalog discovers
+              one entry per JAR without resource-copy collision.
+            -->
+            <dependencies>
+                <dependency>
+                    <groupId>com.coveragex</groupId>
+                    <artifactId>coveragex-test-fixtures-jdk22</artifactId>
+                    <version>${project.version}</version>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>com.coveragex</groupId>
+                    <artifactId>coveragex-test-fixtures-jdk25</artifactId>
+                    <version>${project.version}</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-jdk22-test-sources</id>
+                                <phase>generate-test-sources</phase>
+                                <goals><goal>add-test-source</goal></goals>
+                                <configuration>
+                                    <sources>
+                                        <source>src/test/java-jdk22</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>add-jdk25-test-sources</id>
+                                <phase>generate-test-sources</phase>
+                                <goals><goal>add-test-source</goal></goals>
+                                <configuration>
+                                    <sources>
+                                        <source>src/test/java-jdk25</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

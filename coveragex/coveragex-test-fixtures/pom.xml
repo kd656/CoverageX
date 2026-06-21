@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.coveragex</groupId>
+        <artifactId>coveragex</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>coveragex-test-fixtures</artifactId>
+    <name>CoverageX Test Fixtures</name>
+    <description>
+        Java-construct fixtures consumed by coveragex-compatibility-tests. Each class
+        exercises one Java language construct (Tier A / B / C in the test strategy doc)
+        via a static execute() method with deterministic inputs.
+
+        Compiled by the JDK chosen via maven-toolchains-plugin from the active
+        compatibility-tests profile (fixtures-jdk21 / -jdk22 / -jdk25). Property
+        ${fixture.jdk} defaults to 21 in the parent POM; profiles override it.
+    </description>
+
+    <build>
+        <plugins>
+            <!--
+              Activate the JDK selected by ${fixture.jdk}. Toolchain entries live in
+              ~/.m2/toolchains.xml (developer machines) and coveragex/.ci/toolchains.xml
+              (CI runs). Falling back to the running Maven JDK is intentionally NOT
+              configured — we want the build to fail fast if the requested toolchain
+              is unavailable, so a fixture can never be silently compiled by the
+              wrong javac.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-toolchains-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution><goals><goal>toolchain</goal></goals></execution>
+                </executions>
+                <configuration>
+                    <toolchains>
+                        <jdk><version>${fixture.jdk}</version></jdk>
+                    </toolchains>
+                </configuration>
+            </plugin>
+
+            <!--
+              fork=true so an external javac (from the toolchain JDK) runs instead
+              of the in-process compiler from the Maven JDK. Without fork=true, the
+              toolchain plugin's choice has no effect on which compiler runs.
+
+              No <release> pinned: the toolchain JDK's javac decides the class file
+              version, which is exactly what the compatibility matrix wants.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <fork>true</fork>
+                    <release>${fixture.jdk}</release>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

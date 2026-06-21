@@ -1,0 +1,73 @@
+package com.coveragex.core.report.pipeline.steps;
+
+import com.coveragex.core.report.model.BranchResult;
+import com.coveragex.core.report.model.ClassMetrics;
+import com.coveragex.core.report.model.MethodMetrics;
+import com.coveragex.core.report.model.ReportModel;
+import com.coveragex.core.report.pipeline.PipelineStepId;
+import com.coveragex.core.report.pipeline.ReportPipelineStep;
+import com.coveragex.core.report.pipeline.results.Suggestion;
+import com.coveragex.core.report.pipeline.results.SuggestionsResult;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+public class SuggestionsStep extends ReportPipelineStep {
+
+    @Override
+    public PipelineStepId stepId() {
+        return PipelineStepId.SUGGESTIONS;
+    }
+
+    @Override
+    public void handle(ReportModel model) {
+        List<Suggestion> suggestions = new ArrayList<>();
+
+        for (ClassMetrics cm : model.getClassMetrics()) {
+            Map<String, List<BranchResult>> branchesByMethod = cm.branches().stream()
+                .collect(Collectors.groupingBy(BranchResult::methodName));
+
+            for (MethodMetrics mm : cm.methods()) {
+                if (mm.isImplicitDefaultConstructor()) {
+                    continue;
+                }
+                // Method never invoked
+                if (mm.hitCount() == 0) {
+                    suggestions.add(new Suggestion(cm.classId(), mm.methodName(), mm.startLine(),
+                        mm.isConstructor()
+                            ? "Add a basic test that creates an instance and exercises this constructor."
+                            : "Add a basic happy-path test that calls " + mm.methodName() + "()."));
+                }
+
+                // Branch with one direction uncovered
+                for (BranchResult br : branchesByMethod.getOrDefault(mm.methodName(), List.of())) {
+                    if (br.trueHit() && !br.falseHit()) {
+                        suggestions.add(new Suggestion(cm.classId(), mm.methodName(), br.line(),
+                            "Add a test that makes '" + br.conditionText() + "' evaluate to false."));
+                    } else if (!br.trueHit() && br.falseHit()) {
+                        suggestions.add(new Suggestion(cm.classId(), mm.methodName(), br.line(),
+                            "Add a test that makes '" + br.conditionText() + "' evaluate to true."));
+                    }
+                }
+
+                // Low argument diversity
+                int totalInvocations = mm.hitCount();
+                int uniqueCombos = mm.invocations().size();
+                if (uniqueCombos >= 1 && uniqueCombos <= 2 && totalInvocations > 5) {
+                    suggestions.add(new Suggestion(cm.classId(), mm.methodName(), mm.startLine(),
+                        "Consider parameterised or property-based testing for " + displayName(cm, mm)
+                            + "() — currently only " + uniqueCombos + " unique argument combination(s) used."));
+                }
+            }
+        }
+
+        model.put(SuggestionsResult.class, new SuggestionsResult(List.copyOf(suggestions)));
+        proceed(model);
+    }
+
+    private String displayName(ClassMetrics cm, MethodMetrics mm) {
+        return mm.isConstructor() ? cm.simpleName() : mm.methodName();
+    }
+}
