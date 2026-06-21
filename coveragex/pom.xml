@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.coveragex</groupId>
+    <artifactId>coveragex</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>CoverageX</name>
+    <description>Code coverage analysis tool with source-aware analysis, bytecode instrumentation, and rich reports to reveal line, branch, method, invocation, and test-level coverage gaps.</description>
+
+    <modules>
+        <module>coveragex-api</module>
+        <module>coveragex-test-api</module>
+        <module>coveragex-core</module>
+        <module>coveragex-agent</module>
+        <module>coveragex-maven-plugin</module>
+        <module>coveragex-test-junit5</module>
+        <module>coveragex-test-fixtures</module>
+        <module>coveragex-compatibility-tests</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>21</maven.compiler.release>
+
+        <!--
+          Fixture JDK for the compatibility-tests matrix. Defaults to 21 (the supported
+          floor). Overridden per profile (fixtures-jdk22, fixtures-jdk25, ...) in
+          coveragex-compatibility-tests/pom.xml.
+        -->
+        <fixture.jdk>21</fixture.jdk>
+
+        <!-- Dependency versions -->
+        <slf4j.version>2.0.16</slf4j.version>
+        <asm.version>9.9</asm.version>
+        <javaparser.version>3.26.3</javaparser.version>
+        <jackson.version>2.18.2</jackson.version>
+
+        <!-- Test dependency versions -->
+        <junit-bom.version>5.11.4</junit-bom.version>
+        <assertj.version>3.27.3</assertj.version>
+
+        <!-- Maven Plugin API versions -->
+        <maven.version>3.9.12</maven.version>
+        <maven-plugin-annotations.version>3.15.1</maven-plugin-annotations.version>
+        <maven-plugin-plugin.version>3.15.1</maven-plugin-plugin.version>
+
+        <!-- Plugin versions -->
+        <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
+        <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
+
+        <!-- Template engine -->
+        <freemarker.version>2.3.33</freemarker.version>
+
+        <!-- JSON serialization -->
+        <fastjson2.version>2.0.53</fastjson2.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- JUnit 5 BOM -->
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit-bom.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Internal modules -->
+            <dependency>
+                <groupId>com.coveragex</groupId>
+                <artifactId>coveragex-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.coveragex</groupId>
+                <artifactId>coveragex-test-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.coveragex</groupId>
+                <artifactId>coveragex-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.coveragex</groupId>
+                <artifactId>coveragex-agent</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Logging -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+
+            <!-- ASM -->
+            <dependency>
+                <groupId>org.ow2.asm</groupId>
+                <artifactId>asm</artifactId>
+                <version>${asm.version}</version>
+            </dependency>
+
+            <!-- JavaParser -->
+            <dependency>
+                <groupId>com.github.javaparser</groupId>
+                <artifactId>javaparser-core</artifactId>
+                <version>${javaparser.version}</version>
+            </dependency>
+
+            <!-- Jackson -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+
+            <!-- Maven Plugin API -->
+            <dependency>
+                <groupId>org.apache.maven</groupId>
+                <artifactId>maven-plugin-api</artifactId>
+                <version>${maven.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.maven.plugin-tools</groupId>
+                <artifactId>maven-plugin-annotations</artifactId>
+                <version>${maven-plugin-annotations.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.maven</groupId>
+                <artifactId>maven-core</artifactId>
+                <version>${maven.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.maven</groupId>
+                <artifactId>maven-artifact</artifactId>
+                <version>${maven.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.maven</groupId>
+                <artifactId>maven-model</artifactId>
+                <version>${maven.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!-- Freemarker template engine -->
+            <dependency>
+                <groupId>org.freemarker</groupId>
+                <artifactId>freemarker</artifactId>
+                <version>${freemarker.version}</version>
+            </dependency>
+
+            <!-- FastJson2 JSON serialization -->
+            <dependency>
+                <groupId>com.alibaba.fastjson2</groupId>
+                <artifactId>fastjson2</artifactId>
+                <version>${fastjson2.version}</version>
+            </dependency>
+
+            <!-- Test dependencies -->
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-core</artifactId>
+                <version>${assertj.version}</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven-compiler-plugin.version}</version>
+                    <configuration>
+                        <release>${maven.compiler.release}</release>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven-surefire-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>${maven-jar-plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+    <!--
+      Compatibility matrix profiles. Each one overrides ${fixture.jdk}, which is
+      consumed by:
+       - coveragex-test-fixtures/pom.xml — toolchains plugin (picks the JDK to
+         run javac) + maven-compiler-plugin's <release>${fixture.jdk}</release>
+       - coveragex-compatibility-tests/pom.xml — surefire propagates fixture.jdk
+         to the test JVM as a system property for @EnabledOnFixtureJdk.
+
+      Defined at the parent so -P selection applies across the whole reactor
+      (otherwise -am child builds wouldn't see the overridden property).
+    -->
+    <profiles>
+        <profile>
+            <id>fixtures-jdk21</id>
+            <activation><activeByDefault>true</activeByDefault></activation>
+            <properties><fixture.jdk>21</fixture.jdk></properties>
+        </profile>
+        <profile>
+            <id>fixtures-jdk22</id>
+            <properties><fixture.jdk>22</fixture.jdk></properties>
+            <modules>
+                <module>coveragex-test-fixtures-jdk22</module>
+            </modules>
+        </profile>
+        <profile>
+            <id>fixtures-jdk25</id>
+            <properties><fixture.jdk>25</fixture.jdk></properties>
+            <modules>
+                <module>coveragex-test-fixtures-jdk22</module>
+                <module>coveragex-test-fixtures-jdk25</module>
+            </modules>
+        </profile>
+    </profiles>
+</project>

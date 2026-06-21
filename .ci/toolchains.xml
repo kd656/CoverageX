@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  CI-checked-in Maven toolchains file.
+
+  Used by the compatibility-tests matrix (see coveragex-core-test-strategy-impl.md
+  §6.1) so each matrix row compiles its fixtures with the real javac of the
+  declared JDK rather than a release flag from a single tool JDK.
+
+  Developers: copy this file to ~/.m2/toolchains.xml and replace each
+  ${env.JAVA_NN_HOME} with the absolute path to the matching local install
+  (SDKMAN, Homebrew, or manual). See CONTRIBUTING.md for the full setup.
+
+  CI: actions/setup-java exports JAVA_HOME_<N>_X64 for each installed JDK; a
+  workflow step copies those to JAVA_21_HOME / JAVA_22_HOME / JAVA_25_HOME and
+  fails fast if any required JDK is missing. See .github/workflows/ci.yml.
+
+  Maven invocation:  mvn -t .ci/toolchains.xml ...
+-->
+<toolchains xmlns="http://maven.apache.org/TOOLCHAINS/1.1.0">
+    <toolchain>
+        <type>jdk</type>
+        <provides><version>21</version></provides>
+        <configuration><jdkHome>${env.JAVA_21_HOME}</jdkHome></configuration>
+    </toolchain>
+    <toolchain>
+        <type>jdk</type>
+        <provides><version>22</version></provides>
+        <configuration><jdkHome>${env.JAVA_22_HOME}</jdkHome></configuration>
+    </toolchain>
+    <toolchain>
+        <type>jdk</type>
+        <provides><version>25</version></provides>
+        <configuration><jdkHome>${env.JAVA_25_HOME}</jdkHome></configuration>
+    </toolchain>
+</toolchains>
