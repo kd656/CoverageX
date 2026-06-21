@@ -56,12 +56,6 @@ services use may be allowed when it does not compete with CoverageX.
 | `coveragex-test-fixtures-*`     | Modules per JDK version operators                                                  |
 | `coveragex-test-junit5`         | JUnit 5 integration for test attribution                                           |
 
-## Requirements
-
-- JDK 21 or newer for building CoverageX
-- Maven 3.9+ for the core multi-module build
-- Gradle wrapper in `coveragex-gradle` for the Gradle plugin
-- A Java project with compiled production classes and tests
 
 ## Build From Source
 
