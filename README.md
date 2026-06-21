@@ -63,6 +63,39 @@ services use may be allowed when it does not compete with CoverageX.
 mvn -f coveragex/pom.xml clean install
 ```
 
+## Snapshot builds usage
+Since CoverageX is in an active development state, in order to use snapshot builds, ensure that the following repository is added to your project.
+
+```xml
+    <repositories>
+        <repository>
+            <id>central-portal-snapshots</id>
+            <name>Central Portal Snapshots</name>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>central-portal-snapshots</id>
+            <name>Central Portal Snapshots</name>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
+```
+
 ## Maven Quick Start
 
 Add the Maven plugin to the project you want to measure:
