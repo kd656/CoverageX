@@ -73,31 +73,39 @@ Add the Maven plugin to the project you want to measure:
 
 ```xml
 <build>
-  <plugins>
-    <plugin>
-      <groupId>com.coveragex</groupId>
-      <artifactId>coveragex-maven-plugin</artifactId>
-      <version>0.1.0-SNAPSHOT</version>
-      <executions>
-        <execution>
-          <goals>
-            <goal>analyze</goal>
-            <goal>prepare-agent</goal>
-            <goal>enrich</goal>
-            <goal>report</goal>
-          </goals>
-        </execution>
-      </executions>
-      <configuration>
-        <reportFormats>html</reportFormats>
-        <minimumCoverage>80</minimumCoverage>
-        <failOnLowCoverage>true</failOnLowCoverage>
-        <enableInsights>true</enableInsights>
-        <enableSuggestions>true</enableSuggestions>
-        <enableInvocationTracking>true</enableInvocationTracking>
-      </configuration>
-    </plugin>
-  </plugins>
+    <plugins>
+        <plugin>
+            <groupId>com.coveragex</groupId>
+            <artifactId>coveragex-maven-plugin</artifactId>
+            <version>0.1.0-SNAPSHOT</version>
+            <configuration>
+                <reportFormats>html</reportFormats>
+                <enableInvocationTracking>true</enableInvocationTracking>
+                <enableInsights>true</enableInsights>
+                <enableSuggestions>true</enableSuggestions>
+                <enableOverCoverageAnalysis>true</enableOverCoverageAnalysis>
+                <includes>
+                    <include>org.example.**</include>
+                </includes>
+                <excludes>
+                    <exclude>**.Test</exclude>
+                    <exclude>**.*Test</exclude>
+                    <exclude>**.Tests</exclude>
+                    <exclude>**.*Tests</exclude>
+                </excludes>
+            </configuration>
+            <executions>
+                <execution>
+                    <goals>
+                        <goal>analyze</goal>
+                        <goal>prepare-agent</goal>
+                        <goal>enrich</goal>
+                        <goal>report</goal>
+                    </goals>
+                </execution>
+            </executions>
+        </plugin>
+    </plugins>
 </build>
 ```
 
