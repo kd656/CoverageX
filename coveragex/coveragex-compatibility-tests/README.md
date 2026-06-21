@@ -20,7 +20,7 @@ naming exactly which fixture and which assertion drifted.
 ## Layout
 
 ```
-src/test/java/com/coveragex/compat/
+src/test/java/io/github/kd656/coveragex/compat/
 ├── ProbePlanByConstructTest.java        Parameterized — static plan check
 ├── ProbeHitsByConstructTest.java        Parameterized — runtime hits check
 ├── contract/
@@ -113,7 +113,7 @@ fails. The CI workflow uploads that directory as an artifact named
 
 ```sh
 mvn -pl coveragex-compatibility-tests test
-cat target/plan-dumps/jdk-21/com.coveragex.fixtures.SomeFixture.plan.txt
+cat target/plan-dumps/jdk-21/io.github.kd656.coveragex.fixtures.SomeFixture.plan.txt
 # refine the contract → re-run → repeat
 ```
 

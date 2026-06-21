@@ -71,7 +71,7 @@ Add the Maven plugin to the project you want to measure:
 <build>
     <plugins>
         <plugin>
-            <groupId>com.coveragex</groupId>
+            <groupId>io.github.kd656</groupId>
             <artifactId>coveragex-maven-plugin</artifactId>
             <version>0.1.0-SNAPSHOT</version>
             <configuration>
@@ -113,7 +113,7 @@ Add the test integration module in test scope:
 
 ```xml
 <dependency>
-  <groupId>com.coveragex</groupId>
+  <groupId>io.github.kd656</groupId>
   <artifactId>coveragex-test-junit5</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <scope>test</scope>
