@@ -101,6 +101,11 @@ jobs:
             echo "JAVA_${jdk}_HOME=${JDK21_PATH}" >> "$GITHUB_ENV"
           done
 
+      - name: Reset Maven runtime to JDK 21
+        run: |
+          echo "JAVA_HOME=${JAVA_21_HOME}" >> "$GITHUB_ENV"
+          echo "${JAVA_21_HOME}/bin" >> "$GITHUB_PATH"
+
       - name: Run compatibility tests
         working-directory: coveragex
         run: |
