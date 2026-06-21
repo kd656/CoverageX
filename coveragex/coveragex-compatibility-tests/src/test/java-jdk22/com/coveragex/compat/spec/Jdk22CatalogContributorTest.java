@@ -1,5 +1,6 @@
 package com.coveragex.compat.spec;
 
+import com.coveragex.compat.spec.fixture.UnnamedPatternInSwitchSpec;
 import org.junit.jupiter.api.Test;
 
 import java.util.ServiceLoader;
@@ -16,16 +17,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 class Jdk22CatalogContributorTest {
 
     @Test
-    void contributorIsDiscoverable() {
-        boolean found = false;
-        for (FixtureCatalogContributor c : ServiceLoader.load(FixtureCatalogContributor.class)) {
-            if (c instanceof Jdk22FixtureCatalog) {
-                found = true;
-                break;
-            }
-        }
-        assertThat(found)
+    void contributorIsDiscoverableAndContributesJdk22Specs() {
+        Jdk22FixtureCatalog contributor = ServiceLoader.load(FixtureCatalogContributor.class).stream()
+                .map(ServiceLoader.Provider::get)
+                .filter(Jdk22FixtureCatalog.class::isInstance)
+                .map(Jdk22FixtureCatalog.class::cast)
+                .findFirst()
+                .orElse(null);
+
+        assertThat(contributor)
                 .as("Jdk22FixtureCatalog should be discovered by ServiceLoader under -Pfixtures-jdk22 or any cumulative-superset profile")
-                .isTrue();
+                .isNotNull();
+        assertThat(contributor.specs())
+                .as("Jdk22FixtureCatalog should contribute JDK 22 fixture specs")
+                .hasSize(1)
+                .allSatisfy(spec -> assertThat(spec).isInstanceOf(UnnamedPatternInSwitchSpec.class));
     }
 }

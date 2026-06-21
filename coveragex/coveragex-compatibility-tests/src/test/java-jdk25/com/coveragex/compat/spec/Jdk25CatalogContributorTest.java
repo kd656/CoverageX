@@ -1,5 +1,6 @@
 package com.coveragex.compat.spec;
 
+import com.coveragex.compat.spec.fixture.FlexibleCtorBodySpec;
 import org.junit.jupiter.api.Test;
 
 import java.util.ServiceLoader;
@@ -19,16 +20,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 class Jdk25CatalogContributorTest {
 
     @Test
-    void contributorIsDiscoverable() {
-        boolean found = false;
-        for (FixtureCatalogContributor c : ServiceLoader.load(FixtureCatalogContributor.class)) {
-            if (c instanceof Jdk25FixtureCatalog) {
-                found = true;
-                break;
-            }
-        }
-        assertThat(found)
+    void contributorIsDiscoverableAndContributesJdk25Specs() {
+        Jdk25FixtureCatalog contributor = ServiceLoader.load(FixtureCatalogContributor.class).stream()
+                .map(ServiceLoader.Provider::get)
+                .filter(Jdk25FixtureCatalog.class::isInstance)
+                .map(Jdk25FixtureCatalog.class::cast)
+                .findFirst()
+                .orElse(null);
+
+        assertThat(contributor)
                 .as("Jdk25FixtureCatalog should be discovered by ServiceLoader under -Pfixtures-jdk25")
-                .isTrue();
+                .isNotNull();
+        assertThat(contributor.specs())
+                .as("Jdk25FixtureCatalog should contribute JDK 25 fixture specs")
+                .hasSize(1)
+                .allSatisfy(spec -> assertThat(spec).isInstanceOf(FlexibleCtorBodySpec.class));
     }
 }

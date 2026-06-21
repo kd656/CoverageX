@@ -21,10 +21,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -34,8 +34,15 @@ jobs:
         working-directory: coveragex
         run: mvn -B install
 
+      - name: Upload local CoverageX artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: m2-coveragex
+          path: ~/.m2/repository/com/coveragex
+          retention-days: 1
+
       - name: Upload Maven plugin jar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coveragex-maven-plugin
           path: coveragex/coveragex-maven-plugin/target/*.jar
@@ -52,15 +59,17 @@ jobs:
         include:
           - profile: fixtures-jdk22
             fixture-jdk: '22'
+            modules: coveragex-test-fixtures,coveragex-test-fixtures-jdk22,coveragex-compatibility-tests
           - profile: fixtures-jdk25
             fixture-jdk: '25'
+            modules: coveragex-test-fixtures,coveragex-test-fixtures-jdk22,coveragex-test-fixtures-jdk25,coveragex-compatibility-tests
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - id: setup-jdk21
         name: Setup tool JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -68,7 +77,7 @@ jobs:
 
       - id: setup-fixture-jdk
         name: Setup fixture JDK ${{ matrix.fixture-jdk }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: ${{ matrix.fixture-jdk }}
@@ -106,16 +115,22 @@ jobs:
           echo "JAVA_HOME=${JAVA_21_HOME}" >> "$GITHUB_ENV"
           echo "${JAVA_21_HOME}/bin" >> "$GITHUB_PATH"
 
+      - name: Restore local CoverageX artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: m2-coveragex
+          path: ~/.m2/repository/com/coveragex
+
       - name: Run compatibility tests
         working-directory: coveragex
         run: |
           mvn -B -t .ci/toolchains.xml \
             -P${{ matrix.profile }} \
-            -pl coveragex-compatibility-tests -am test
+            -pl ${{ matrix.modules }} test
 
       - name: Upload plan dumps on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: plan-dumps-${{ matrix.profile }}
           path: coveragex/coveragex-compatibility-tests/target/plan-dumps/
