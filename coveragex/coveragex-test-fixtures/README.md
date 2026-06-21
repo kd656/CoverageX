@@ -15,7 +15,7 @@ feed bytecode into `coveragex-compatibility-tests`.
 
 ## What it contains
 
-`src/main/java/com/coveragex/fixtures/` holds one `.java` per fixture, organized into three tiers:
+`src/main/java/io/github/kd656/coveragex/fixtures/` holds one `.java` per fixture, organized into three tiers:
 
 | Tier | Examples | Purpose |
 |---|---|---|
@@ -48,7 +48,7 @@ parse on the baseline — none exists today.
 
 ## Adding a fixture
 
-1. Drop a `.java` file in `src/main/java/com/coveragex/fixtures/<Name>.java`.
+1. Drop a `.java` file in `src/main/java/io/github/kd656/coveragex/fixtures/<Name>.java`.
    It must declare `public static void execute()` driving the construct.
 2. Add a `<Name>Contracts.java` factory in `coveragex-compatibility-tests`.
 3. Add **two** `Arguments.of(...)` entries — one per runner.
@@ -65,7 +65,7 @@ mvn -Pfixtures-jdk25 -pl coveragex-test-fixtures install
 
 The resulting `target/coveragex-test-fixtures-*.jar` contains one
 `.class` file per fixture, suitable for loading from the test classpath
-via `BytecodeFixtures.load("com.coveragex.fixtures.<Name>")`.
+via `BytecodeFixtures.load("io.github.kd656.coveragex.fixtures.<Name>")`.
 
 ## Related docs
 

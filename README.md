@@ -63,6 +63,39 @@ services use may be allowed when it does not compete with CoverageX.
 mvn -f coveragex/pom.xml clean install
 ```
 
+## Snapshot builds usage
+Since CoverageX is in an active development state, in order to use snapshot builds, ensure that the following repository is added to your project.
+
+```xml
+    <repositories>
+        <repository>
+            <id>central-portal-snapshots</id>
+            <name>Central Portal Snapshots</name>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>central-portal-snapshots</id>
+            <name>Central Portal Snapshots</name>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
+```
+
 ## Maven Quick Start
 
 Add the Maven plugin to the project you want to measure:
@@ -71,7 +104,7 @@ Add the Maven plugin to the project you want to measure:
 <build>
     <plugins>
         <plugin>
-            <groupId>com.coveragex</groupId>
+            <groupId>io.github.kd656</groupId>
             <artifactId>coveragex-maven-plugin</artifactId>
             <version>0.1.0-SNAPSHOT</version>
             <configuration>
@@ -113,7 +146,7 @@ Add the test integration module in test scope:
 
 ```xml
 <dependency>
-  <groupId>com.coveragex</groupId>
+  <groupId>io.github.kd656</groupId>
   <artifactId>coveragex-test-junit5</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <scope>test</scope>

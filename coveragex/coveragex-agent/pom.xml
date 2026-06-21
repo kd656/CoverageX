@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.coveragex</groupId>
+        <groupId>io.github.kd656</groupId>
         <artifactId>coveragex</artifactId>
         <version>0.1.0-SNAPSHOT</version>
     </parent>
@@ -17,16 +17,16 @@
     <dependencies>
         <!-- Internal -->
         <dependency>
-            <groupId>com.coveragex</groupId>
+            <groupId>io.github.kd656</groupId>
             <artifactId>coveragex-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.coveragex</groupId>
+            <groupId>io.github.kd656</groupId>
             <artifactId>coveragex-test-api</artifactId>
             <scope>compile</scope>
         </dependency>
         <dependency>
-            <groupId>com.coveragex</groupId>
+            <groupId>io.github.kd656</groupId>
             <artifactId>coveragex-core</artifactId>
         </dependency>
 
@@ -73,7 +73,7 @@
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <manifestEntries>
-                                        <Premain-Class>com.coveragex.agent.CoverageAgent</Premain-Class>
+                                        <Premain-Class>io.github.kd656.coveragex.agent.CoverageAgent</Premain-Class>
                                         <Can-Redefine-Classes>true</Can-Redefine-Classes>
                                         <Can-Retransform-Classes>true</Can-Retransform-Classes>
                                     </manifestEntries>
@@ -81,7 +81,7 @@
                             </transformers>
                             <filters>
                                 <filter>
-                                    <artifact>com.coveragex:coveragex-test-api</artifact>
+                                    <artifact>io.github.kd656:coveragex-test-api</artifact>
                                     <excludes><exclude>**</exclude></excludes>
                                 </filter>
                                 <filter>

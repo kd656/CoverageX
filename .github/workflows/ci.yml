@@ -38,7 +38,7 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: m2-coveragex
-          path: ~/.m2/repository/com/coveragex
+          path: ~/.m2/repository/io/github/kd656
           retention-days: 1
 
       - name: Upload Maven plugin jar
@@ -119,7 +119,7 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           name: m2-coveragex
-          path: ~/.m2/repository/com/coveragex
+          path: ~/.m2/repository/io/github/kd656
 
       - name: Run compatibility tests
         working-directory: coveragex
