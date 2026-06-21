@@ -2,9 +2,9 @@
 
 **Coverage that explains the test story behind the percentage.**
 
-![junit5-example.png](examples/junit5-example-project/junit5-example.png)
+![An example of a generated HTML report](examples/junit5-example-project/junit5-example.png)
 
-CoverageX is a coverage tool built for teams that want to dive deeper into their product’s quality. It gives engineering teams a clearer view of test coverage beyond a simple percentage.
+CoverageX is a coverage tool built for teams that want to dive deeper into their product’s quality. It gives engineering teams a clearer view of test coverage beyond a simple percentage by generating an HTML report to easily identify any problems or misses in your codebase.
 
 CoverageX makes tests and quality easier to reason about by answering questions like:
 
