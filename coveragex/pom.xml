@@ -12,6 +12,14 @@
     <name>CoverageX</name>
     <description>Code coverage analysis tool with source-aware analysis, bytecode instrumentation, and rich reports to reveal line, branch, method, invocation, and test-level coverage gaps.</description>
 
+    <licenses>
+        <license>
+            <name>FSL-1.1-ALv2</name>
+            <url>https://github.com/kd656/CoverageX/blob/main/LICENSE.md</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <modules>
         <module>coveragex-api</module>
         <module>coveragex-test-api</module>

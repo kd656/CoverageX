@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: "-Dmaven.artifact.threads=8"
+  FIXTURE_JDKS: "21 22 25"
+
+jobs:
+  build:
+    name: Build project (JDK 21)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build parent project
+        working-directory: coveragex
+        run: mvn -B install
+
+      - name: Upload Maven plugin jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: coveragex-maven-plugin
+          path: coveragex/coveragex-maven-plugin/target/*.jar
+          if-no-files-found: error
+
+  compatibility-matrix:
+    name: Compatibility (${{ matrix.profile }})
+    needs: build
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: fixtures-jdk22
+            fixture-jdk: '22'
+          - profile: fixtures-jdk25
+            fixture-jdk: '25'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: setup-jdk21
+        name: Setup tool JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - id: setup-fixture-jdk
+        name: Setup fixture JDK ${{ matrix.fixture-jdk }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.fixture-jdk }}
+          java-package: jdk
+
+      - name: Export toolchain JDK paths
+        env:
+          JDK21_PATH: ${{ steps.setup-jdk21.outputs.path }}
+          FIXTURE_JDK: ${{ matrix.fixture-jdk }}
+          FIXTURE_PATH: ${{ steps.setup-fixture-jdk.outputs.path }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${FIXTURE_PATH}" ]; then
+            echo "::error::setup-java did not provide a JDK ${FIXTURE_JDK} install path." >&2
+            exit 1
+          fi
+
+          echo "JAVA_21_HOME=${JDK21_PATH}" >> "$GITHUB_ENV"
+          echo "JAVA_${FIXTURE_JDK}_HOME=${FIXTURE_PATH}" >> "$GITHUB_ENV"
+
+          # Maven validates every JDK entry in .ci/toolchains.xml, so inactive
+          # fixture JDKs get a real placeholder path. The active profile still
+          # selects the real fixture JDK.
+          for jdk in ${FIXTURE_JDKS}; do
+            if [ "${jdk}" = "21" ] || [ "${jdk}" = "${FIXTURE_JDK}" ]; then
+              continue
+            fi
+
+            echo "JAVA_${jdk}_HOME=${JDK21_PATH}" >> "$GITHUB_ENV"
+          done
+
+      - name: Run compatibility tests
+        working-directory: coveragex
+        run: |
+          mvn -B -t .ci/toolchains.xml \
+            -P${{ matrix.profile }} \
+            -pl coveragex-compatibility-tests -am test
+
+      - name: Upload plan dumps on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan-dumps-${{ matrix.profile }}
+          path: coveragex/coveragex-compatibility-tests/target/plan-dumps/
+          if-no-files-found: ignore
+
+  all-green:
+    name: All green
+    needs: [build, compatibility-matrix]
+    runs-on: ubuntu-latest
+
+    steps:
+      - run: echo "Build and compatibility matrix passed."
