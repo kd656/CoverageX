@@ -58,7 +58,7 @@
 
         <!-- Test dependency versions -->
         <junit-bom.version>5.11.4</junit-bom.version>
-        <assertj.version>3.27.3</assertj.version>
+        <assertj.version>3.27.7</assertj.version>
 
         <!-- Maven Plugin API versions -->
         <maven.version>3.9.12</maven.version>
