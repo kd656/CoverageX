@@ -3,21 +3,49 @@ package io.github.kd656.coveragex.core.collect;
 /**
  * Receives probe-hit events from instrumented bytecode.
  *
- * <p>This is the narrow hot-path surface: it carries only what the injected
- * {@code recordHit} call needs. Splitting it out from the broader collector
- * interface lets the bytecode-bound delegate depend on the minimum surface
- * and lets test doubles implement only this method without stubbing
- * registration or snapshot APIs they do not exercise.</p>
+ * <p>One method per probe kind mirrors the sealed
+ * {@link io.github.kd656.coveragex.api.data.ProbeMetadata} hierarchy.
+ * New probe kinds add a new method here rather than a new arm of a
+ * switch on a discriminator argument.</p>
+ *
+ * <p>Default implementations are provided for each method so that
+ * existing narrow test doubles that only implement a single kind do not
+ * need to be updated.</p>
  */
 public interface ProbeRecorder {
 
     /**
-     * Records a probe hit with method name and optional argument data.
+     * Records a method-entry probe hit together with the captured argument
+     * values. Only method-entry hits contribute to the per-method invocation
+     * report.
      *
      * @param classId    the internal class name
      * @param methodName the simple method name (e.g. {@code doSomething})
      * @param probeId    the probe index within the class
-     * @param args       boxed argument values for entry probes, or {@code null} for non-entry probes
+     * @param args       the boxed argument values, never {@code null}
      */
-    void recordHit(String classId, String methodName, int probeId, Object[] args);
+    default void recordMethodEntry(String classId, String methodName,
+                                   int probeId, Object[] args) {
+    }
+
+    /**
+     * Records a branch-direction probe hit together with any operand values
+     * that the capture emitter stashed (may be empty).
+     *
+     * @param classId       the internal class name
+     * @param probeId       the probe index within the class
+     * @param operandValues the captured operand values, never {@code null}
+     */
+    default void recordBranchHit(String classId, int probeId, Object[] operandValues) {
+    }
+
+    /**
+     * Records a probe hit that carries no payload — return, throw, or segment
+     * probes.
+     *
+     * @param classId the internal class name
+     * @param probeId the probe index within the class
+     */
+    default void recordSimpleHit(String classId, int probeId) {
+    }
 }

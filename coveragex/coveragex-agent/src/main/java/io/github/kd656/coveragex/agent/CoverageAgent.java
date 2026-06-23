@@ -87,11 +87,18 @@ public class CoverageAgent {
 
     private static void initializeTestTracking() {
         try {
-            Class.forName("io.github.kd656.coveragex.test.api.TestContextHolder", false, ClassLoader.getSystemClassLoader());
-
-            ServiceLoader<ProbeExecutionContextProvider> loader = ServiceLoader.load(ProbeExecutionContextProvider.class,
+            Class.forName("io.github.kd656.coveragex.test.api.TestContextHolder", false,
                     ClassLoader.getSystemClassLoader());
 
+            ServiceLoader<ProbeExecutionContextProvider> loader;
+            try {
+                loader = ServiceLoader.load(ProbeExecutionContextProvider.class,
+                        ClassLoader.getSystemClassLoader());
+            } catch (Exception e) {
+                LOG.warn("CoverageX: ServiceLoader.load(ProbeExecutionContextProvider) failed; "
+                        + "test attribution will be empty.", e);
+                return;
+            }
 
             for (ProbeExecutionContextProvider probeExecutionContextProvider : loader) {
                 String name = probeExecutionContextProvider.getClass().getName();
@@ -99,14 +106,16 @@ public class CoverageAgent {
                 try {
                     CoverageDataCollectorDelegate.contextRegistry()
                             .installGlobal(probeExecutionContextProvider::currentContext);
-                    LOG.info("CoverageX: registered context provided: {}", name);
+                    LOG.info("CoverageX: registered context provider: {}", name);
                     return;
                 } catch (Exception e) {
                     LOG.warn("CoverageX: skipping provider: {}", name, e);
                 }
             }
 
-            LOG.debug("CoverageX: no ProbeExecutionContextProvider found - test tracking is disabled.");
+            LOG.warn("CoverageX: no ProbeExecutionContextProvider on classpath; "
+                    + "test attribution will be empty. "
+                    + "Add coveragex-test-junit5 (or another provider) to the test classpath to enable.");
 
         } catch (ClassNotFoundException e) {
             LOG.debug("CoverageX: coveragex-test-api is not on classpath - test tracking is disabled.");

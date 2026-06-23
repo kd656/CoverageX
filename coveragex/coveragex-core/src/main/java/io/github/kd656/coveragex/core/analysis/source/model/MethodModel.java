@@ -50,6 +50,12 @@ public final class MethodModel {
     // True if isConstructor
     private final boolean isConstructor;
 
+    /**
+     * Source-level parameter names in declaration order.
+     * Empty when the method has no parameters or when the source map was not available.
+     */
+    private final List<String> parameterNames;
+
     private final List<DecisionModel> decisionsList = new ArrayList<>();
 
     private MethodModel(String className,
@@ -64,7 +70,8 @@ public final class MethodModel {
                         boolean isAbstract,
                         int startLine,
                         int endLine,
-                        boolean isConstructor) {
+                        boolean isConstructor,
+                        List<String> parameterNames) {
         this.className = className;
         this.name = name;
         this.id = generateMethodId(className);
@@ -80,6 +87,7 @@ public final class MethodModel {
         this.startLine = startLine;
         this.endLine = endLine;
         this.isConstructor = isConstructor;
+        this.parameterNames = List.copyOf(parameterNames);
     }
 
     /**
@@ -98,6 +106,8 @@ public final class MethodModel {
      * @param isAbstract      {@code true} if the method is {@code abstract}
      * @param startLine       first source line of the method body
      * @param endLine         last source line of the method body
+     * @param parameterNames  source-level parameter names in declaration order;
+     *                        empty when not available
      * @return a new {@link MethodModel}
      */
     public static MethodModel createMethod(String className,
@@ -111,10 +121,11 @@ public final class MethodModel {
                                            boolean isProtected,
                                            boolean isAbstract,
                                            int startLine,
-                                           int endLine) {
+                                           int endLine,
+                                           List<String> parameterNames) {
         return new MethodModel(className, name, descriptor, parametersCount, parametersTypes,
                 returnType, isStatic, isPublic, isPrivate, isProtected, isAbstract,
-                startLine, endLine, false);
+                startLine, endLine, false, parameterNames);
     }
 
     /**
@@ -129,6 +140,8 @@ public final class MethodModel {
      * @param isProtected     {@code true} if the constructor is {@code protected}
      * @param startLine       first source line of the constructor body
      * @param endLine         last source line of the constructor body
+     * @param parameterNames  source-level parameter names in declaration order;
+     *                        empty when not available
      * @return a new {@link MethodModel}
      */
     public static MethodModel createConstructor(String className,
@@ -139,10 +152,11 @@ public final class MethodModel {
                                                 boolean isPrivate,
                                                 boolean isProtected,
                                                 int startLine,
-                                                int endLine) {
+                                                int endLine,
+                                                List<String> parameterNames) {
         return new MethodModel(className, "<init>", descriptor, parametersCount, parametersTypes,
                 "void", false, isPublic, isPrivate, isProtected, false,
-                startLine, endLine, true);
+                startLine, endLine, true, parameterNames);
     }
 
     /**
@@ -186,13 +200,15 @@ public final class MethodModel {
             @JsonProperty("startLine") int startLine,
             @JsonProperty("endLine") int endLine,
             @JsonProperty("isConstructor") boolean isConstructor,
+            @JsonProperty("parameterNames") List<String> parameterNames,
             @JsonProperty("decisionsList") List<DecisionModel> decisionsList) {
 
         MethodModel model = new MethodModel(
                 className, name, descriptor, parametersCount,
                 parametersTypes != null ? parametersTypes : List.of(),
                 returnType, isStatic, isPublic, isPrivate, isProtected, isAbstract,
-                startLine, endLine, isConstructor);
+                startLine, endLine, isConstructor,
+                parameterNames != null ? parameterNames : List.of());
 
         if (decisionsList != null) {
             decisionsList.forEach(model::addDecision);
@@ -321,5 +337,19 @@ public final class MethodModel {
 
     public int getEndLine() {
         return endLine;
+    }
+
+    /**
+     * Returns the source-level parameter names in declaration order.
+     *
+     * <p>Populated when the method was built from a parsed AST node via
+     * {@link #createMethod} or {@link #createConstructor}. Empty when the
+     * method has no parameters or when no source map was available at
+     * analysis time.</p>
+     *
+     * @return immutable list of parameter names; never {@code null}
+     */
+    public List<String> getParameterNames() {
+        return parameterNames;
     }
 }

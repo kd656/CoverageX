@@ -5,9 +5,11 @@ import io.github.kd656.coveragex.api.data.ClassTestCoverage;
 import io.github.kd656.coveragex.api.data.ExecutionData;
 import io.github.kd656.coveragex.api.data.InvocationRecord;
 import io.github.kd656.coveragex.api.data.MethodHit;
+import io.github.kd656.coveragex.api.data.OperandKind;
 import io.github.kd656.coveragex.api.data.ProbeHit;
 import io.github.kd656.coveragex.api.data.ProbeMetadata;
 import io.github.kd656.coveragex.core.report.model.BranchResult;
+import io.github.kd656.coveragex.core.report.model.ConditionCase;
 import io.github.kd656.coveragex.core.report.model.ClassMetrics;
 import io.github.kd656.coveragex.core.report.model.MethodMetrics;
 import io.github.kd656.coveragex.core.report.model.ReportModel;
@@ -24,9 +26,10 @@ class ReportingServiceTest {
     @Test
     void assignsOutOfOrderProbesToOverloadBySourceRange() throws Exception {
         List<ProbeMetadata> metadata = List.of(
-            new ProbeMetadata.MethodProbe(0, "normalize", 10, 15),
-            new ProbeMetadata.BranchProbe(2, "normalize", 22, "value == null", ProbeMetadata.BranchDirection.TRUE),
-            new ProbeMetadata.MethodProbe(1, "normalize", 20, 25),
+            new ProbeMetadata.MethodProbe(0, "normalize", 10, 15, List.of("value")),
+            new ProbeMetadata.BranchProbe(2, "normalize", 22, "value == null",
+                    ProbeMetadata.BranchDirection.TRUE, 1, OperandKind.BINARY_COMPARE, List.of("value")),
+            new ProbeMetadata.MethodProbe(1, "normalize", 20, 25, List.of("value")),
             new ProbeMetadata.SegmentProbe(3, "normalize", 23, 24)
         );
         boolean[] probeHits = { true, true, true, false };
@@ -65,9 +68,11 @@ class ReportingServiceTest {
         // Loop body executed 7 times → TRUE direction count = 7;
         // Loop exit taken once → FALSE direction count = 1.
         List<ProbeMetadata> metadata = List.of(
-            new ProbeMetadata.MethodProbe(0, "loop", 10, 20),
-            new ProbeMetadata.BranchProbe(1, "loop", 12, "i < n", ProbeMetadata.BranchDirection.TRUE),
-            new ProbeMetadata.BranchProbe(2, "loop", 12, "i < n", ProbeMetadata.BranchDirection.FALSE)
+            new ProbeMetadata.MethodProbe(0, "loop", 10, 20, List.of("i", "n")),
+            new ProbeMetadata.BranchProbe(1, "loop", 12, "i < n",
+                    ProbeMetadata.BranchDirection.TRUE, 1, OperandKind.BINARY_COMPARE, List.of("i", "n")),
+            new ProbeMetadata.BranchProbe(2, "loop", 12, "i < n",
+                    ProbeMetadata.BranchDirection.FALSE, 1, OperandKind.BINARY_COMPARE, List.of("i", "n"))
         );
         boolean[] probeHits = { true, true, true };
         Map<Integer, ProbeHit> hits = Map.of(
@@ -84,10 +89,12 @@ class ReportingServiceTest {
 
         assertThat(branches).hasSize(1);
         BranchResult only = branches.getFirst();
-        assertThat(only.trueHit()).isTrue();
-        assertThat(only.falseHit()).isTrue();
-        assertThat(only.trueCount()).isEqualTo(7);
-        assertThat(only.falseCount()).isEqualTo(1);
+        assertThat(only.conditions()).hasSize(1);
+        ConditionCase cc = only.conditions().get(0);
+        assertThat(cc.trueDirection().hit()).isTrue();
+        assertThat(cc.falseDirection().hit()).isTrue();
+        assertThat(cc.trueDirection().count()).isEqualTo(7);
+        assertThat(cc.falseDirection().count()).isEqualTo(1);
     }
 
     private ReportModel buildInitialModel(ExecutionData data) throws Exception {

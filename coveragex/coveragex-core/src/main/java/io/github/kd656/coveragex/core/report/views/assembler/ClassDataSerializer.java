@@ -2,13 +2,15 @@ package io.github.kd656.coveragex.core.report.views.assembler;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
+import io.github.kd656.coveragex.api.data.AttributedInvocation;
+import io.github.kd656.coveragex.api.data.ClassTestCoverage;
 import io.github.kd656.coveragex.api.data.InvocationRecord;
 import io.github.kd656.coveragex.api.data.ProbeMetadata;
 import io.github.kd656.coveragex.api.data.ProbeMetadata.BranchProbe;
-import io.github.kd656.coveragex.api.data.AttributedInvocation;
 import io.github.kd656.coveragex.api.data.TestTrackingSnapshot;
 import io.github.kd656.coveragex.core.insights.Insight;
 import io.github.kd656.coveragex.core.insights.Severity;
+import io.github.kd656.coveragex.core.report.MethodNameFormatter;
 import io.github.kd656.coveragex.core.report.model.*;
 import io.github.kd656.coveragex.core.report.pipeline.results.InvocationReport;
 import io.github.kd656.coveragex.core.report.pipeline.results.InvocationResult;
@@ -25,10 +27,10 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Converts ClassMetrics + insights + model data into a .data.js file content string.
- * The file contains a single CoverageX.registerClass(id, payload) call that the browser
- * loads by injecting a script tag. FastJson2 serialises the typed payload records;
- * Java never manually constructs JSON strings.
+ * Converts ClassMetrics + insights + model data into a .data.js file content
+ * string. The file contains a single {@code CoverageX.registerClass(id, payload)}
+ * call that the browser loads by injecting a script tag. FastJson2 serialises
+ * the typed payload records; Java never manually constructs JSON strings.
  */
 public class ClassDataSerializer {
 
@@ -47,11 +49,15 @@ public class ClassDataSerializer {
      * Builds the full .data.js file content for one class.
      *
      * @param cm          class metrics
-     * @param sourceFile  path to the .java source file, or null when not available
+     * @param sourceFile  path to the .java source file, or {@code null} when
+     *                    not available
      * @param insights    coverage insights for this class (may be empty)
-     * @param model       full report model (used for invocation and test-tracking data)
-     * @param sectionId   the stable section identifier (classId with '/' replaced by '-')
+     * @param model       full report model (used for invocation and
+     *                    test-tracking data)
+     * @param sectionId   the stable section identifier (classId with '/'
+     *                    replaced by '-')
      * @return complete .data.js file content as a string
+     * @throws IOException if the source file cannot be read
      */
     public String serialize(ClassMetrics cm, Path sourceFile, List<Insight> insights,
                             ReportModel model, String sectionId) throws IOException {
@@ -94,7 +100,8 @@ public class ClassDataSerializer {
     // -----------------------------------------------------------------------
 
     private List<SourceLinePayload> buildSourceLines(ClassMetrics cm, Path sourceFile,
-                                                     String sectionId, ReportModel model) throws IOException {
+                                                      String sectionId,
+                                                      ReportModel model) throws IOException {
         List<String> rawLines = Files.readAllLines(sourceFile, StandardCharsets.UTF_8);
         ProbeIndex index = ProbeIndex.build(cm.probeMetadata());
 
@@ -108,6 +115,9 @@ public class ClassDataSerializer {
 
         boolean showInvocations = model.get(InvocationResult.class).isPresent();
         Map<String, InvocationReport> invocationReports = buildInvocationReports(cm.classId(), model);
+
+        TestTrackingSnapshot snapshot = model.getTestTrackingSnapshot();
+        ClassTestCoverage attribution = snapshot.forClass(cm.classId());
 
         String prevMethodKey = null;
         List<SourceLinePayload> result = new ArrayList<>();
@@ -138,7 +148,7 @@ public class ClassDataSerializer {
             }
 
             List<BranchBadgePayload> badges = lc.hasBranch()
-                ? buildBranchBadges(lineProbes, cm)
+                ? buildBranchBadges(lineProbes, cm, attribution)
                 : null;
 
             String hitDisplay = showInvocations
@@ -163,10 +173,10 @@ public class ClassDataSerializer {
     }
 
     private MethodMarkerPayload buildMethodMarker(ClassMetrics cm, LineClassification lc,
-                                                  Map<String, InvocationReport> invocationReports,
-                                                  Map<String, Integer> methodHits,
-                                                  Map<String, MethodMetrics> metricsByMethod,
-                                                  ReportModel model) {
+                                                   Map<String, InvocationReport> invocationReports,
+                                                   Map<String, Integer> methodHits,
+                                                   Map<String, MethodMetrics> metricsByMethod,
+                                                   ReportModel model) {
         ProbeMetadata.MethodProbe mp = lc.firstMethodProbe();
         String key = MethodMetrics.methodKey(mp);
         InvocationReport report = invocationReports.get(key);
@@ -179,15 +189,18 @@ public class ClassDataSerializer {
 
         List<InvocationPayload> invocations = buildInvocationPayloads(attributed, report);
 
+        List<String> paramNames = mp.parameterNames().isEmpty() ? null : mp.parameterNames();
+
         return new MethodMarkerPayload(
             displayCallableName(cm, metricsByMethod.get(key)),
             calls,
-            invocations.isEmpty() ? null : invocations
+            invocations.isEmpty() ? null : invocations,
+            paramNames
         );
     }
 
     private List<InvocationPayload> buildInvocationPayloads(List<AttributedInvocation> attributed,
-                                                             InvocationReport report) {
+                                                              InvocationReport report) {
         if (!attributed.isEmpty() && report != null) {
             Map<List<String>, Integer> countByArgs = report.argCombinations().stream()
                 .collect(Collectors.toMap(
@@ -213,8 +226,20 @@ public class ClassDataSerializer {
         return List.of();
     }
 
+    /**
+     * Builds the TRUE / FALSE badge payloads for one source line that carries
+     * branch probes.
+     *
+     * @param lineProbes  the probes attached to the line being rendered
+     * @param cm          per-class metrics holding the branch results
+     * @param attribution the test-tracking snapshot for the class, or
+     *                    {@code null} when the run had no listener
+     * @return the badge payloads in display order, or an empty list when the
+     *         line carries no branch probes
+     */
     private List<BranchBadgePayload> buildBranchBadges(List<ProbeMetadata> lineProbes,
-                                                         ClassMetrics cm) {
+                                                         ClassMetrics cm,
+                                                         ClassTestCoverage attribution) {
         int probeLine = lineProbes.stream()
             .filter(p -> p instanceof BranchProbe)
             .map(p -> ((BranchProbe) p).line())
@@ -227,15 +252,8 @@ public class ClassDataSerializer {
         if (branchResults.isEmpty()) return Collections.emptyList();
 
         List<BranchConditionPayload> conditions = branchResults.stream()
-            .map(br -> new BranchConditionPayload(
-                br.conditionText(),
-                br.trueHit()  ? 1 : 0,
-                br.falseHit() ? 1 : 0,
-                br.trueCount(),
-                br.falseCount(),
-                nullIfEmpty(BranchHintGenerator.hint(br.conditionText(), true,  br.trueHit(), br.falseHit())),
-                nullIfEmpty(BranchHintGenerator.hint(br.conditionText(), false, br.trueHit(), br.falseHit()))
-            ))
+            .flatMap(br -> br.conditions().stream())
+            .map(cc -> toConditionPayload(cc, attribution))
             .toList();
 
         boolean anyTrueCovered = false, allTrueCovered = true;
@@ -248,22 +266,87 @@ public class ClassDataSerializer {
         int trueCovCode  = toCondCovCode(allTrueCovered,  anyTrueCovered);
         int falseCovCode = toCondCovCode(allFalseCovered, anyFalseCovered);
 
-        // Build test lists from test-tracking data in BranchResult
-        // (BranchResult doesn't carry per-test data directly; tests come from test tracking)
-        // For now, tests list is empty — test tracking data is not in BranchResult
-        List<BranchTestPayload> emptyTests = null;
-
         return List.of(
-            new BranchBadgePayload(1, trueCovCode,  conditions, emptyTests),
-            new BranchBadgePayload(0, falseCovCode, conditions, emptyTests)
+            new BranchBadgePayload(1, trueCovCode,  conditions, null),
+            new BranchBadgePayload(0, falseCovCode, conditions, null)
         );
     }
 
+    /**
+     * Converts one {@link ConditionCase} into the wire payload that the
+     * browser-side popover consumes.
+     *
+     * @param cc          the condition case to convert
+     * @param attribution the test-tracking snapshot, may be {@code null}
+     * @return the JSON-ready condition payload
+     */
+    private BranchConditionPayload toConditionPayload(ConditionCase cc,
+                                                       ClassTestCoverage attribution) {
+        DirectionOutcome t = cc.trueDirection();
+        DirectionOutcome f = cc.falseDirection();
+        String text = cc.conditionText();
+        return new BranchConditionPayload(
+                text,
+                t.hit() ? 1 : 0,
+                f.hit() ? 1 : 0,
+                t.count(),
+                f.count(),
+                nullIfEmpty(BranchHintGenerator.hint(text, true,  t.hit(), f.hit())),
+                nullIfEmpty(BranchHintGenerator.hint(text, false, t.hit(), f.hit())),
+                buildBranchTests(attribution, t.probeId()),
+                buildBranchTests(attribution, f.probeId()),
+                cc.argLabels());
+    }
+
+    /**
+     * Looks up the test-attribution rows for one probe id. Each distinct
+     * {@code (testMethod, argValues)} tuple produces one row in the returned
+     * list, preserving insertion order. This allows the same test method to
+     * appear multiple times when it hit the branch with different operand values
+     * (e.g. a parameterised test).
+     *
+     * @param attribution the per-class attribution snapshot; may be
+     *                    {@code null} when the run had no test listener
+     * @param probeId     the probe id to look up
+     * @return one row per {@code (testMethod, argValues)} tuple that hit the
+     *         probe, or an empty list
+     */
+    private List<BranchTestPayload> buildBranchTests(ClassTestCoverage attribution,
+                                                     int probeId) {
+        if (attribution == null || probeId < 0) {
+            return List.of();
+        }
+        List<AttributedInvocation> invs = attribution.probeInvocations().get(probeId);
+        if (invs == null || invs.isEmpty()) {
+            return List.of();
+        }
+
+        // Each AttributedInvocation carries a (args, testMethods) pair; expand into
+        // (testMethod, args) rows and aggregate hit counts per distinct tuple.
+        record RowKey(String testMethod, List<String> args) {}
+        Map<RowKey, int[]> countByTuple = new LinkedHashMap<>();
+        for (AttributedInvocation inv : invs) {
+            List<String> args = inv.args() != null ? inv.args() : List.of();
+            for (String testMethod : inv.testMethods()) {
+                RowKey key = new RowKey(testMethod, args);
+                countByTuple.computeIfAbsent(key, k -> new int[1])[0]++;
+            }
+        }
+
+        return countByTuple.entrySet().stream()
+                .map(e -> new BranchTestPayload(
+                        e.getKey().testMethod(),
+                        null,
+                        e.getValue()[0],
+                        e.getKey().args()))
+                .toList();
+    }
+
     private String computeHitDisplay(List<ProbeMetadata> lineProbes, Coverage coverage,
-                                     ProbeMetadata.MethodProbe coveringMethod,
-                                     Map<String, InvocationReport> invocationReports,
-                                     Map<String, Integer> methodHits,
-                                     Map<String, MethodMetrics> metricsByMethod) {
+                                      ProbeMetadata.MethodProbe coveringMethod,
+                                      Map<String, InvocationReport> invocationReports,
+                                      Map<String, Integer> methodHits,
+                                      Map<String, MethodMetrics> metricsByMethod) {
         if (lineProbes.isEmpty()) return "";
         if (coverage == Coverage.MISS) return "0x";
         if (coveringMethod != null && isVisibleCallable(MethodMetrics.methodKey(coveringMethod), metricsByMethod)) {
@@ -273,7 +356,8 @@ public class ClassDataSerializer {
             if (n > 0) return n + "x";
         }
         for (ProbeMetadata pm : lineProbes) {
-            if (pm instanceof ProbeMetadata.MethodProbe mp && isVisibleCallable(MethodMetrics.methodKey(mp), metricsByMethod)) {
+            if (pm instanceof ProbeMetadata.MethodProbe mp
+                    && isVisibleCallable(MethodMetrics.methodKey(mp), metricsByMethod)) {
                 String key = MethodMetrics.methodKey(mp);
                 InvocationReport r = invocationReports.get(key);
                 int n = r != null ? r.totalCallCount() : methodHits.getOrDefault(key, 0);
@@ -301,16 +385,19 @@ public class ClassDataSerializer {
             ));
         }
         for (BranchResult br : cm.branches()) {
-            rows.add(new MethodFallbackPayload(
-                br.conditionText() + " [T]",
-                br.trueHit() ? 1 : 0,
-                br.trueHit() ? "hit" : "miss"
-            ));
-            rows.add(new MethodFallbackPayload(
-                br.conditionText() + " [F]",
-                br.falseHit() ? 1 : 0,
-                br.falseHit() ? "hit" : "miss"
-            ));
+            for (ConditionCase cc : br.conditions()) {
+                String label = cc.conditionText() != null ? cc.conditionText() : "(condition)";
+                rows.add(new MethodFallbackPayload(
+                    label + " [T]",
+                    cc.trueDirection().hit() ? 1 : 0,
+                    cc.trueDirection().hit() ? "hit" : "miss"
+                ));
+                rows.add(new MethodFallbackPayload(
+                    label + " [F]",
+                    cc.falseDirection().hit() ? 1 : 0,
+                    cc.falseDirection().hit() ? "hit" : "miss"
+                ));
+            }
         }
         return rows;
     }
@@ -386,7 +473,10 @@ public class ClassDataSerializer {
         if (metrics == null) {
             return "";
         }
-        return metrics.isConstructor() ? cm.simpleName() + "()" : metrics.methodName();
+        if (metrics.isConstructor()) {
+            return cm.simpleName() + "()";
+        }
+        return MethodNameFormatter.format(metrics.methodName());
     }
 
     private String insightReference(ClassMetrics cm, Insight insight) {

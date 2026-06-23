@@ -101,8 +101,12 @@ public final class ProbePlanBuilder {
         @Override
         protected String resolveConditionText(int opcode, int branchLine) {
             SourceAwareBranchResolver.ResolvedBranch branch = branchResolver.resolve(opcode, branchLine);
-            // The shared visitor asks for branch text before branch polarity; stash both from one lookup.
+            // The shared visitor asks for branch text before branch polarity; stash all fields from one lookup.
             pendingJumpMeansTrue = branch.jumpMeansTrue();
+            // Populate the pending fields so ProbeMetadataVisitor writes them into BranchProbe.
+            pendingConditionId = branch.conditionId();
+            pendingKind = branch.kind();
+            pendingArgLabels = branch.argLabels();
             return branch.conditionText();
         }
 
@@ -134,7 +138,8 @@ public final class ProbePlanBuilder {
 
         @Override
         protected void onBranchProbe(int opcode, Label originalTarget,
-                                     int fallThroughProbeId, int jumpTakenProbeId) {
+                                     int fallThroughProbeId, int jumpTakenProbeId,
+                                     int[] operandLocals) {
         }
     }
 }

@@ -26,7 +26,7 @@ class ProbeRecorderRegistryTest {
 
         registry.installGlobal(captured);
 
-        registry.current().recordHit("ClassA", "doX", 0, new Object[]{1});
+        registry.current().recordSimpleHit("ClassA", 0);
 
         assertThat(captured.hits).hasSize(1);
         assertThat(captured.hits.get(0).classId()).isEqualTo("ClassA");
@@ -40,7 +40,7 @@ class ProbeRecorderRegistryTest {
         registry.installGlobal(global);
 
         try (var scope = registry.scope(scoped)) {
-            registry.current().recordHit("ClassA", "doX", 0, null);
+            registry.current().recordSimpleHit("ClassA", 0);
         }
 
         assertThat(scoped.hits).hasSize(1);
@@ -55,9 +55,9 @@ class ProbeRecorderRegistryTest {
         registry.installGlobal(global);
 
         try (var scope = registry.scope(scoped)) {
-            registry.current().recordHit("Inside", "m", 0, null);
+            registry.current().recordSimpleHit("Inside", 0);
         }
-        registry.current().recordHit("After", "m", 0, null);
+        registry.current().recordSimpleHit("After", 0);
 
         assertThat(scoped.hits).extracting(Hit::classId).containsExactly("Inside");
         assertThat(global.hits).extracting(Hit::classId).containsExactly("After");
@@ -72,13 +72,13 @@ class ProbeRecorderRegistryTest {
         registry.installGlobal(global);
 
         try (var outerScope = registry.scope(outer)) {
-            registry.current().recordHit("OuterBefore", "m", 0, null);
+            registry.current().recordSimpleHit("OuterBefore", 0);
             try (var innerScope = registry.scope(inner)) {
-                registry.current().recordHit("Inner", "m", 0, null);
+                registry.current().recordSimpleHit("Inner", 0);
             }
-            registry.current().recordHit("OuterAfter", "m", 0, null);
+            registry.current().recordSimpleHit("OuterAfter", 0);
         }
-        registry.current().recordHit("AfterAll", "m", 0, null);
+        registry.current().recordSimpleHit("AfterAll", 0);
 
         assertThat(outer.hits).extracting(Hit::classId).containsExactly("OuterBefore", "OuterAfter");
         assertThat(inner.hits).extracting(Hit::classId).containsExactly("Inner");
@@ -101,7 +101,7 @@ class ProbeRecorderRegistryTest {
                 workerInsideScope.countDown();
                 mainHitRecorded.await();
                 workerSawRecorder.set(registry.current());
-                registry.current().recordHit("Worker", "m", 0, null);
+                registry.current().recordSimpleHit("Worker", 0);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -109,7 +109,7 @@ class ProbeRecorderRegistryTest {
         worker.start();
 
         workerInsideScope.await();
-        registry.current().recordHit("Main", "m", 0, null);
+        registry.current().recordSimpleHit("Main", 0);
         mainHitRecorded.countDown();
         worker.join();
 
@@ -129,19 +129,19 @@ class ProbeRecorderRegistryTest {
         scope.close();
         scope.close();
 
-        registry.current().recordHit("After", "m", 0, null);
+        registry.current().recordSimpleHit("After", 0);
         assertThat(global.hits).extracting(Hit::classId).containsExactly("After");
         assertThat(scoped.hits).isEmpty();
     }
 
-    private record Hit(String classId, String methodName, int probeId) {}
+    private record Hit(String classId, int probeId) {}
 
     private static final class CapturingRecorder implements ProbeRecorder {
         final List<Hit> hits = new ArrayList<>();
 
         @Override
-        public void recordHit(String classId, String methodName, int probeId, Object[] args) {
-            hits.add(new Hit(classId, methodName, probeId));
+        public void recordSimpleHit(String classId, int probeId) {
+            hits.add(new Hit(classId, probeId));
         }
     }
 }

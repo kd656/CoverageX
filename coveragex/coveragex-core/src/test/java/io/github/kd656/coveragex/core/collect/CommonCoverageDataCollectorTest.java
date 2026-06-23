@@ -54,10 +54,10 @@ class CoverageDataCollectorTest {
     }
 
     @Test
-    void recordHitMarksProbe() {
+    void recordSimpleHitMarksProbe() {
         collector.registerClass("com/example/Bar", 3, metadata(3));
 
-        collector.recordHit("com/example/Bar", "doWork", 1, null);
+        collector.recordSimpleHit("com/example/Bar", 1);
 
         boolean[] probes = collector.getProbeData("com/example/Bar");
         assertThat(probes[0]).isFalse();
@@ -66,16 +66,16 @@ class CoverageDataCollectorTest {
     }
 
     @Test
-    void recordHitIgnoresUnregisteredClass() {
-        collector.recordHit("com/example/Unknown", "someMethod", 0, null);
+    void recordSimpleHitIgnoresUnregisteredClass() {
+        collector.recordSimpleHit("com/example/Unknown", 0);
     }
 
     @Test
-    void recordHitIgnoresOutOfBoundsProbe() {
+    void recordSimpleHitIgnoresOutOfBoundsProbe() {
         collector.registerClass("com/example/Baz", 2, metadata(2));
 
-        collector.recordHit("com/example/Baz", "run", 5, null);
-        collector.recordHit("com/example/Baz", "run", -1, null);
+        collector.recordSimpleHit("com/example/Baz", 5);
+        collector.recordSimpleHit("com/example/Baz", -1);
 
         boolean[] probes = collector.getProbeData("com/example/Baz");
         assertThat(probes).containsExactly(false, false);
@@ -85,6 +85,7 @@ class CoverageDataCollectorTest {
     void resetClearsAllData() {
         collector.registerClass("com/example/A", 3, metadata(3));
         collector.registerClass("com/example/B", 2, metadata(2));
+        collector.recordSimpleHit("com/example/A", 0);
 
         collector.reset();
 
@@ -93,11 +94,11 @@ class CoverageDataCollectorTest {
     }
 
     @Test
-    void recordHitWithMethodNameAndArgs_storesData() {
+    void recordMethodEntryWithArgs_storesData() {
         collector.registerClass("com/example/Svc", 3, metadata(3));
 
         Object[] args = new Object[]{"hello", 42};
-        collector.recordHit("com/example/Svc", "process", 0, args);
+        collector.recordMethodEntry("com/example/Svc", "process", 0, args);
 
         boolean[] probes = collector.getProbeData("com/example/Svc");
         assertThat(probes[0]).isTrue();
@@ -116,10 +117,10 @@ class CoverageDataCollectorTest {
     }
 
     @Test
-    void recordHitWithNullArgs_stillRecordsHit() {
+    void recordSimpleHit_stillRecordsHit() {
         collector.registerClass("com/example/Svc2", 5, metadata(5));
 
-        collector.recordHit("com/example/Svc2", "compute", 2, null);
+        collector.recordSimpleHit("com/example/Svc2", 2);
 
         boolean[] probes = collector.getProbeData("com/example/Svc2");
         assertThat(probes[2]).isTrue();
@@ -138,17 +139,17 @@ class CoverageDataCollectorTest {
     }
 
     @Test
-    void recordHitSameMethodMultipleTimes_countsAggregated() {
+    void recordMethodEntrySameMethodMultipleTimes_countsAggregated() {
         collector.registerClass("com/example/Counter", 1, metadata(1));
 
         Object[] args1 = new Object[]{"alpha"};
-        collector.recordHit("com/example/Counter", "run", 0, args1);
-        collector.recordHit("com/example/Counter", "run", 0, args1);
-        collector.recordHit("com/example/Counter", "run", 0, args1);
+        collector.recordMethodEntry("com/example/Counter", "run", 0, args1);
+        collector.recordMethodEntry("com/example/Counter", "run", 0, args1);
+        collector.recordMethodEntry("com/example/Counter", "run", 0, args1);
 
         Object[] args2 = new Object[]{"beta"};
-        collector.recordHit("com/example/Counter", "run", 0, args2);
-        collector.recordHit("com/example/Counter", "run", 0, args2);
+        collector.recordMethodEntry("com/example/Counter", "run", 0, args2);
+        collector.recordMethodEntry("com/example/Counter", "run", 0, args2);
 
         ExecutionData snapshot = collector.snapshot();
         ClassCoverage cc = snapshot.classCoverage("com/example/Counter");
@@ -186,7 +187,7 @@ class CoverageDataCollectorTest {
         try {
             collector.registerClass("com/example/Service", 3, metadata(3));
             Object[] args = new Object[]{"order-99", 42};
-            collector.recordHit("com/example/Service", "processOrder", 0, args);
+            collector.recordMethodEntry("com/example/Service", "processOrder", 0, args);
 
             collector.flush();
         } finally {
@@ -233,7 +234,7 @@ class CoverageDataCollectorTest {
     @Test
     void snapshotProbeHitsArrayIsDefensiveCopy() {
         collector.registerClass("com/example/Def", 3, metadata(3));
-        collector.recordHit("com/example/Def", "go", 1, null);
+        collector.recordSimpleHit("com/example/Def", 1);
 
         boolean[] snapshotHits = collector.snapshot().classCoverage("com/example/Def").probeHits();
         snapshotHits[1] = false;
@@ -250,7 +251,7 @@ class CoverageDataCollectorTest {
 
         Thread[] threads = new Thread[20];
         for (int i = 0; i < threads.length; i++) {
-            threads[i] = new Thread(() -> collector.recordHit("com/example/Conc", "m", 0, null));
+            threads[i] = new Thread(() -> collector.recordSimpleHit("com/example/Conc", 0));
         }
         for (Thread t : threads) t.start();
         for (Thread t : threads) t.join();
@@ -285,7 +286,7 @@ class CoverageDataCollectorTest {
         System.setProperty("coveragex.destFile", nested.toAbsolutePath().toString());
         try {
             collector.registerClass("com/example/Dir", 1, metadata(1));
-            collector.recordHit("com/example/Dir", "run", 0, null);
+            collector.recordSimpleHit("com/example/Dir", 0);
             collector.flush();
             assertThat(Files.exists(nested)).isTrue();
         } finally {
@@ -303,7 +304,7 @@ class CoverageDataCollectorTest {
         };
         CommonCoverageDataCollector local = new CommonCoverageDataCollector(throwing);
         local.registerClass("com/example/Err", 1, metadata(1));
-        local.recordHit("com/example/Err", "m", 0, null);
+        local.recordSimpleHit("com/example/Err", 0);
 
         assertThatCode(() -> local.flush()).doesNotThrowAnyException();
     }
@@ -319,7 +320,7 @@ class CoverageDataCollectorTest {
         collector.registerClass("com/example/Loop", 1, metadata(1));
 
         for (int i = 0; i < 7; i++) {
-            collector.recordHit("com/example/Loop", "loopBody", 0, null);
+            collector.recordSimpleHit("com/example/Loop", 0);
         }
 
         ExecutionData snapshot = collector.snapshot();
@@ -341,7 +342,7 @@ class CoverageDataCollectorTest {
                 futures.add(pool.submit(() -> {
                     startGate.await();
                     for (int i = 0; i < hitsPerThread; i++) {
-                        collector.recordHit("com/example/Concurrent", "hot", 0, null);
+                        collector.recordSimpleHit("com/example/Concurrent", 0);
                     }
                     return null;
                 }));
@@ -360,7 +361,8 @@ class CoverageDataCollectorTest {
                 probeId,
                 "method" + probeId,
                 -1,
-                -1
+                -1,
+                List.of()
         );
     }
 }

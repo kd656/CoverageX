@@ -1,5 +1,6 @@
 package io.github.kd656.coveragex.core.analysis.source.impl;
 
+import io.github.kd656.coveragex.api.data.OperandKind;
 import io.github.kd656.coveragex.core.analysis.source.DescriptorResolver;
 import io.github.kd656.coveragex.core.analysis.source.SourceAnalyzer;
 import io.github.kd656.coveragex.core.analysis.source.model.*;
@@ -204,7 +205,25 @@ public final class SourceCodeAnalyzer implements SourceAnalyzer {
                 // can populate BranchProbe.conditionText without touching source files
                 // at instrumentation time.
                 String conditionText = leaf.toString();
-                operands.add(new OperandModel(i + 1, toRange(leaf), conditionText, jumpMeansTrueList.get(i)));
+                OperandKind operandKind = classifyLeaf(leaf);
+                OperandArgVisitor.LeafResult derived = OperandArgDeriver.derive(leaf);
+                // Compute binaryCaptureMask for BINARY_COMPARE leaves so the bytecode
+                // capture emitter knows which stack slot is capturable (non-literal).
+                // Bit 0 (value 1): lhs is non-literal (capturable).
+                // Bit 1 (value 2): rhs is non-literal (capturable).
+                // When either side is a long or floating-point literal, set mask to 0:
+                // javac compiles those comparisons as LCMP/DCMPL/FCMPL + IF*, leaving
+                // only the CMP result (-1/0/1) on the stack at the IF* site — not the
+                // original operand.
+                int binaryCaptureMask = 0;
+                if (leaf instanceof BinaryExpr binaryLeaf) {
+                    binaryCaptureMask = computeBinaryCaptureMask(binaryLeaf);
+                }
+                operands.add(new OperandModel(
+                        i + 1, toRange(leaf), conditionText, jumpMeansTrueList.get(i),
+                        operandKind, derived.labels(), binaryCaptureMask,
+                        derived.methodCallCaptureMask(), derived.methodCallName(),
+                        derived.methodCallArgCount()));
             }
 
             // RPN encoding for MC/DC structure
@@ -311,6 +330,87 @@ public final class SourceCodeAnalyzer implements SourceAnalyzer {
             return expr.isInstanceOfExpr();
         }
 
+        /**
+         * Classifies a leaf operand expression into an {@link OperandKind}.
+         *
+         * <p>The classification drives column-header rendering in the report and the
+         * bytecode capture strategy. The switch covers the five node types that
+         * {@link OperandArgVisitor} handles; anything else maps to
+         * {@link OperandKind#UNKNOWN}.</p>
+         *
+         * @param leaf the leaf expression to classify
+         * @return the structural kind of the expression
+         */
+        private OperandKind classifyLeaf(Expression leaf) {
+            return switch (leaf) {
+                case MethodCallExpr ignored -> OperandKind.METHOD_CALL;
+                case BinaryExpr ignored     -> OperandKind.BINARY_COMPARE;
+                case UnaryExpr ignored      -> OperandKind.UNARY;
+                case NameExpr ignored       -> OperandKind.BARE_REFERENCE;
+                default                     -> OperandKind.UNKNOWN;
+            };
+        }
+
+        /**
+         * Computes the binary capture mask for a {@link BinaryExpr} leaf operand.
+         *
+         * <p>Bit 0 (value 1): lhs is capturable (non-literal, non-null).
+         * Bit 1 (value 2): rhs is capturable (non-literal, non-null).</p>
+         *
+         * <p>When either side is a long or floating-point literal, the mask is set to
+         * {@code 0}. javac emits long/double/float comparisons as {@code LCMP} /
+         * {@code DCMPL} / {@code FCMPL} (or {@code *G} variants) followed by a
+         * single-int {@code IF*}. At the {@code IF*} site the stack holds the
+         * comparison result ({@code -1}/{@code 0}/{@code 1}), not the original operand
+         * values; capturing there would produce mislabelled data.</p>
+         *
+         * @param expr the binary comparison expression
+         * @return the capture bitmask, or {@code 0} when capture is not safe
+         */
+        private int computeBinaryCaptureMask(BinaryExpr expr) {
+            if (isCategory2Literal(expr.getLeft()) || isCategory2Literal(expr.getRight())) {
+                return 0;
+            }
+            int mask = 0;
+            if (!isLiteralOrNull(expr.getLeft()))  mask |= 1;
+            if (!isLiteralOrNull(expr.getRight())) mask |= 2;
+            return mask;
+        }
+
+        /**
+         * Returns {@code true} when the expression is a long or floating-point
+         * literal, indicating that the surrounding binary comparison compiles to a
+         * category-2 CMP instruction + {@code IF*} where the original operand is
+         * unavailable at the jump site.
+         *
+         * <p>JavaParser does not have a separate {@code FloatLiteralExpr}: both
+         * {@code 1.5} (double) and {@code 1.5f} (float) are represented as
+         * {@link com.github.javaparser.ast.expr.DoubleLiteralExpr}; the {@code f}
+         * suffix is preserved in {@code getValue()}. Therefore
+         * {@code isDoubleLiteralExpr()} catches both {@code double} and {@code float}
+         * literals. {@code char} comparisons ({@code c > 'a'}) compile to
+         * {@code IF_ICMP*} on a category-1 int and go through the existing capture
+         * path correctly — {@link com.github.javaparser.ast.expr.CharLiteralExpr}
+         * is not filtered here.</p>
+         *
+         * @param e the expression to test
+         * @return {@code true} if the expression is a long or floating-point literal
+         */
+        private boolean isCategory2Literal(Expression e) {
+            return e.isLongLiteralExpr() || e.isDoubleLiteralExpr();
+        }
+
+        /**
+         * Returns {@code true} when the expression is a compile-time literal
+         * (any {@link LiteralExpr} subtype) or a {@code null} literal, i.e. a
+         * value that produces a constant on the bytecode stack and for which
+         * capture would always yield the same value. Used to compute
+         * {@link OperandModel#binaryCaptureMask()}.
+         */
+        private boolean isLiteralOrNull(Expression expr) {
+            return expr.isLiteralExpr() || expr.isNullLiteralExpr();
+        }
+
         private Expression unwrap(Expression expr) {
             while (expr != null && expr.isEnclosedExpr()) {
                 expr = expr.asEnclosedExpr().getInner();
@@ -358,6 +458,7 @@ public final class SourceCodeAnalyzer implements SourceAnalyzer {
 
             int parameterCount = methodDecl.getParameters().size();
             List<String> parameterTypes = extractParameterTypes(methodDecl.getParameters());
+            List<String> parameterNames = extractParameterNames(methodDecl.getParameters());
 
             String returnType = methodDecl.getTypeAsString();
 
@@ -384,7 +485,8 @@ public final class SourceCodeAnalyzer implements SourceAnalyzer {
                     isProtected,
                     isAbstract,
                     startLine,
-                    endLine
+                    endLine,
+                    parameterNames
             );
         }
 
@@ -393,6 +495,7 @@ public final class SourceCodeAnalyzer implements SourceAnalyzer {
 
             int parameterCount = constructorDecl.getParameters().size();
             List<String> parameterTypes = extractParameterTypes(constructorDecl.getParameters());
+            List<String> parameterNames = extractParameterNames(constructorDecl.getParameters());
 
             boolean isPublic = constructorDecl.isPublic();
             boolean isPrivate = constructorDecl.isPrivate();
@@ -411,13 +514,30 @@ public final class SourceCodeAnalyzer implements SourceAnalyzer {
                     isPrivate,
                     isProtected,
                     startLine,
-                    endLine
+                    endLine,
+                    parameterNames
             );
         }
 
         private List<String> extractParameterTypes(NodeList<Parameter> parameters) {
             return parameters.stream()
                     .map(p -> p.getType().asString())
+                    .toList();
+        }
+
+        /**
+         * Extracts the source-level parameter names in declaration order.
+         *
+         * <p>Varargs parameters are included using the name as written in source
+         * (e.g. {@code values} for {@code String... values}); no {@code []}
+         * suffix is appended.</p>
+         *
+         * @param parameters the parameter node list from the AST
+         * @return immutable list of parameter names
+         */
+        private List<String> extractParameterNames(NodeList<Parameter> parameters) {
+            return parameters.stream()
+                    .map(Parameter::getNameAsString)
                     .toList();
         }
 

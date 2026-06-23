@@ -76,7 +76,8 @@ class ExecutionDataWriterReaderRoundTripTest {
     void metadata_methodProbe_roundTrip(@TempDir Path tempDir) throws IOException {
         Path file = tempDir.resolve("test.exec");
 
-        ProbeMetadata.MethodProbe probe = new ProbeMetadata.MethodProbe(0, "doWork", 10, 20);
+        ProbeMetadata.MethodProbe probe = new ProbeMetadata.MethodProbe(
+                0, "doWork", 10, 20, List.of("name", "threshold"));
         ClassCoverage cc = new ClassCoverage("com/example/Foo", new boolean[]{false}, Map.of(), Map.of(), List.of(probe), null);
         coverageDataWriter.write(file, new ExecutionData(List.of(cc)));
 
@@ -88,6 +89,23 @@ class ExecutionDataWriterReaderRoundTripTest {
         assertThat(mp.methodName()).isEqualTo("doWork");
         assertThat(mp.startLine()).isEqualTo(10);
         assertThat(mp.endLine()).isEqualTo(20);
+        assertThat(mp.parameterNames()).containsExactly("name", "threshold");
+    }
+
+    @Test
+    void metadata_methodProbe_emptyParameterNames_roundTrip(@TempDir Path tempDir) throws IOException {
+        Path file = tempDir.resolve("test.exec");
+
+        ProbeMetadata.MethodProbe probe = new ProbeMetadata.MethodProbe(
+                0, "run", 5, 8, List.of());
+        ClassCoverage cc = new ClassCoverage("com/example/Foo", new boolean[]{false}, Map.of(), Map.of(), List.of(probe), null);
+        coverageDataWriter.write(file, new ExecutionData(List.of(cc)));
+
+        ExecutionData result = coverageDataReader.read(file);
+        ProbeMetadata readProbe = result.classes().get("com/example/Foo").probeMetadata().get(0);
+        assertThat(readProbe).isInstanceOf(ProbeMetadata.MethodProbe.class);
+        ProbeMetadata.MethodProbe mp = (ProbeMetadata.MethodProbe) readProbe;
+        assertThat(mp.parameterNames()).isEmpty();
     }
 
     @Test
@@ -95,9 +113,10 @@ class ExecutionDataWriterReaderRoundTripTest {
         Path file = tempDir.resolve("test.exec");
 
         ProbeMetadata.BranchProbe probe = new ProbeMetadata.BranchProbe(
-                1, "check", 15, "if (x == null)", ProbeMetadata.BranchDirection.TRUE);
+                1, "check", 15, "if (x == null)", ProbeMetadata.BranchDirection.TRUE,
+                2, OperandKind.BINARY_COMPARE, List.of("x"));
         ClassCoverage cc = new ClassCoverage("com/example/Foo", new boolean[]{false, false}, Map.of(), Map.of(), List.of(
-                        new ProbeMetadata.MethodProbe(0, "check", 10, 20), probe), null);
+                        new ProbeMetadata.MethodProbe(0, "check", 10, 20, List.of()), probe), null);
         coverageDataWriter.write(file, new ExecutionData(List.of(cc)));
 
         ExecutionData result = coverageDataReader.read(file);
@@ -109,6 +128,44 @@ class ExecutionDataWriterReaderRoundTripTest {
         assertThat(bp.line()).isEqualTo(15);
         assertThat(bp.conditionText()).isEqualTo("if (x == null)");
         assertThat(bp.direction()).isEqualTo(ProbeMetadata.BranchDirection.TRUE);
+        assertThat(bp.conditionId()).isEqualTo(2);
+        assertThat(bp.kind()).isEqualTo(OperandKind.BINARY_COMPARE);
+        assertThat(bp.argLabels()).containsExactly("x");
+    }
+
+    /**
+     * Every {@link OperandKind} constant must survive a write/read cycle with its
+     * {@link OperandKind#kind()} field intact. This pins the stable-code contract
+     * end-to-end through the binary format.
+     */
+    @Test
+    void metadata_branchProbe_allOperandKindsRoundTrip(@TempDir Path tempDir) throws IOException {
+        OperandKind[] kinds = OperandKind.values();
+        // Build one probe per kind, plus one leading MethodProbe that occupies probe id 0.
+        List<ProbeMetadata> metadata = new java.util.ArrayList<>();
+        boolean[] hits = new boolean[kinds.length + 1];
+        metadata.add(new ProbeMetadata.MethodProbe(0, "check", 1, 20, List.of()));
+        for (int i = 0; i < kinds.length; i++) {
+            metadata.add(new ProbeMetadata.BranchProbe(
+                    i + 1, "check", 10 + i, "cond" + i,
+                    ProbeMetadata.BranchDirection.TRUE, i + 1,
+                    kinds[i], List.of()));
+        }
+
+        Path file = tempDir.resolve("all-kinds.exec");
+        ClassCoverage cc = new ClassCoverage("com/example/Kinds", hits, Map.of(), Map.of(), metadata, null);
+        coverageDataWriter.write(file, new ExecutionData(List.of(cc)));
+
+        ExecutionData result = coverageDataReader.read(file);
+        List<ProbeMetadata> readMetadata = result.classes().get("com/example/Kinds").probeMetadata();
+        for (int i = 0; i < kinds.length; i++) {
+            ProbeMetadata entry = readMetadata.get(i + 1);
+            assertThat(entry).isInstanceOf(ProbeMetadata.BranchProbe.class);
+            ProbeMetadata.BranchProbe bp = (ProbeMetadata.BranchProbe) entry;
+            assertThat(bp.kind())
+                    .as("OperandKind round-trip failed for %s (code %d)", kinds[i], kinds[i].code())
+                    .isEqualTo(kinds[i]);
+        }
     }
 
     @Test
