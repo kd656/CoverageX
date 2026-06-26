@@ -76,7 +76,7 @@ public class ReportingService {
             for (LineStatus ls : cm.lines()) {
                 if (ls.coverage() != Coverage.NOT_EXECUTABLE) {
                     totalLines++;
-                    if (ls.coverage() == Coverage.HIT || ls.coverage() == Coverage.PARTIAL_BRANCH) {
+                    if (ls.coverage() == Coverage.HIT) {
                         coveredLines++;
                     }
                 }
@@ -136,7 +136,7 @@ public class ReportingService {
         for (LineStatus ls : lineStatuses) {
             if (ls.coverage() != Coverage.NOT_EXECUTABLE) {
                 totalLines++;
-                if (ls.coverage() == Coverage.HIT || ls.coverage() == Coverage.PARTIAL_BRANCH) {
+                if (ls.coverage() == Coverage.HIT) {
                     coveredLines++;
                 }
             }
