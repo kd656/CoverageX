@@ -3,6 +3,7 @@ package io.github.kd656.coveragex.core.report.views;
 import io.github.kd656.coveragex.api.data.InvocationRecord;
 import io.github.kd656.coveragex.api.data.ProbeMetadata;
 import io.github.kd656.coveragex.core.insights.Insight;
+import io.github.kd656.coveragex.core.report.MethodNameFormatter;
 import io.github.kd656.coveragex.core.report.ProbeMetadataHintGenerator;
 import io.github.kd656.coveragex.core.report.ProbeMetadataLabelFormatter;
 import io.github.kd656.coveragex.core.report.ReportContext;
@@ -65,7 +66,7 @@ public class ConsoleReportView implements ReportView {
                 for (InvocationReport report : invResult.reports()) {
                     if (!report.classId().equals(cm.classId())) continue;
                     for (InvocationRecord rec : report.argCombinations()) {
-                        LOG.info("    hit: {}({}) x{}", report.methodName(),
+                        LOG.info("    hit: {}({}) x{}", MethodNameFormatter.format(report.methodName()),
                             formatArgs(rec.args()), rec.count());
                     }
                 }

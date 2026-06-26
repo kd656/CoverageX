@@ -1,5 +1,6 @@
 package io.github.kd656.coveragex.core.instrument;
 
+import io.github.kd656.coveragex.api.data.OperandKind;
 import io.github.kd656.coveragex.core.collect.CommonCoverageDataCollector;
 import io.github.kd656.coveragex.api.data.ProbeMetadata;
 import io.github.kd656.coveragex.core.analysis.source.model.ClassModel;
@@ -12,6 +13,7 @@ import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -199,6 +201,11 @@ public class SourceAwareProbeInjector implements ProbeInjector<SourceAwareInput>
                     probeCounter, metadataAccumulator);
             this.methodModel = methodModel;
             this.branchResolver = new SourceAwareBranchResolver(methodModel);
+            // Populate parameter names from the source map so visitMaxs can include
+            // them in the MethodProbe. Falls back to empty list when no model is available.
+            if (methodModel != null) {
+                pendingParameterNames = methodModel.getParameterNames();
+            }
         }
 
         /**
@@ -224,7 +231,122 @@ public class SourceAwareProbeInjector implements ProbeInjector<SourceAwareInput>
             SourceAwareBranchResolver.ResolvedBranch branch = branchResolver.resolve(opcode, branchLine);
             // Resolve condition text and polarity together so both runtime and static planning agree.
             pendingJumpMeansTrue = branch.jumpMeansTrue();
+            // Populate the pending fields so ProbeMetadataVisitor writes them into BranchProbe.
+            pendingConditionId = branch.conditionId();
+            pendingKind = branch.kind();
+            pendingArgLabels = branch.argLabels();
             return branch.conditionText();
+        }
+
+        /**
+         * Intercepts method-invocation instructions to capture receiver and argument
+         * values for {@link OperandKind#METHOD_CALL} operands before the call site
+         * consumes them.
+         *
+         * <p>The intercept fires when all four conditions hold:</p>
+         * <ol>
+         *   <li>{@link #pendingOperandLocals} is {@code null} (no prior capture
+         *       this operand — the guard prevents a nested call from re-firing after
+         *       the outer call has already been captured).</li>
+         *   <li>The next pending operand on {@link #currentLine} has
+         *       {@code kind == METHOD_CALL}.</li>
+         *   <li>The visited call's simple name matches
+         *       {@link OperandModel#methodCallName()} — rules out unrelated nested
+         *       calls such as {@code resolveUser()} inside
+         *       {@code service.canAccess(resolveUser(), role)}.</li>
+         *   <li>The visited call's descriptor arity matches
+         *       {@link OperandModel#methodCallArgCount()} — guards against overload
+         *       collisions when the inner call happens to share a name.</li>
+         * </ol>
+         *
+         * <p>When the capture mask derived from the analyser is zero (e.g. a
+         * literal-only call like {@code Rules.enabled("A")}),
+         * {@link #captureMethodCallOperand} returns an empty array, and
+         * {@code pendingOperandLocals} remains {@code null}; the branch probe is
+         * then emitted with an empty {@code Object[]} via
+         * {@link #injectBranchProbeCall}. No special-case code is needed for this
+         * path.</p>
+         *
+         * <p>For all other method calls the method delegates to the super chain
+         * without any side effect.</p>
+         *
+         * @param opcode      the invocation opcode (INVOKEVIRTUAL, INVOKEINTERFACE,
+         *                    INVOKESTATIC, INVOKESPECIAL)
+         * @param owner       the internal name of the class that owns the method
+         * @param name        the simple method name
+         * @param descriptor  the JVM method descriptor
+         * @param isInterface {@code true} when the invocation uses INVOKEINTERFACE
+         */
+        @Override
+        public void visitMethodInsn(int opcode, String owner, String name,
+                                    String descriptor, boolean isInterface) {
+            if (pendingOperandLocals == null) {
+                OperandModel pending = branchResolver.peekNextOperand(currentLine);
+                if (pending != null
+                        && pending.kind() == OperandKind.METHOD_CALL
+                        && name.equals(pending.methodCallName())
+                        && Type.getArgumentTypes(descriptor).length == pending.methodCallArgCount()) {
+                    int[] captured = captureMethodCallOperand(
+                            opcode, descriptor, pending.methodCallCaptureMask());
+                    if (captured.length > 0) {
+                        pendingOperandLocals = captured;
+                    }
+                }
+            }
+            super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
+        }
+
+        /**
+         * Intercepts conditional-jump instructions to capture stack operands for
+         * {@link OperandKind#BINARY_COMPARE} operands before the original jump
+         * instruction has a chance to consume them.
+         *
+         * <p>The intercept fires when the next pending branch on {@link #currentLine}
+         * has {@code kind == BINARY_COMPARE} and the opcode is a conditional jump.
+         * Stack values are stashed into fresh local slots; the slot indices are stored
+         * in {@link #pendingOperandLocals} so that the resulting
+         * {@link #onBranchProbe} call can include them in the {@code recordBranchHit}
+         * invocation.</p>
+         *
+         * <p>The override also handles the {@link OperandKind#METHOD_CALL} case for
+         * {@code equals}-style comparisons: if {@link #pendingOperandLocals} is
+         * already set (from an earlier {@link #visitMethodInsn} intercept), this
+         * method leaves it untouched, since the capture already happened.</p>
+         *
+         * @param opcode the conditional-jump opcode
+         * @param label  the original jump target
+         */
+        @Override
+        public void visitJumpInsn(int opcode, org.objectweb.asm.Label label) {
+            // Only intercept conditional jumps; GOTO and JSR pass through directly.
+            if (io.github.kd656.coveragex.core.probe.ProbeOpcodeSupport.isBranchInstruction(opcode)
+                    && pendingOperandLocals == null) {
+                OperandModel pending = branchResolver.peekNextOperand(currentLine);
+                if (pending != null) {
+                    pendingOperandLocals = captureForOperand(pending, opcode);
+                }
+            }
+            super.visitJumpInsn(opcode, label);
+        }
+
+        /**
+         * Selects the capture strategy that matches the operand kind currently
+         * being processed.
+         *
+         * @param pending the next operand on {@link #currentLine} as resolved
+         *                from the source map
+         * @param opcode  the conditional-jump opcode about to execute
+         * @return the captured local slots, or {@code null} when no capture
+         *         is performed
+         */
+        private int[] captureForOperand(OperandModel pending, int opcode) {
+            return switch (pending.kind()) {
+                case BINARY_COMPARE -> pending.binaryCaptureMask() != 0
+                        ? captureBinaryComparisonOperand(opcode, pending.binaryCaptureMask())
+                        : null;
+                case BARE_REFERENCE, UNARY -> captureBooleanStackValue(opcode);
+                default -> null;
+            };
         }
 
         /**

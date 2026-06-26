@@ -4,9 +4,7 @@ import io.github.kd656.coveragex.api.data.ExecutionData;
 import io.github.kd656.coveragex.api.data.ClassCoverage;
 import io.github.kd656.coveragex.api.data.InvocationRecord;
 import io.github.kd656.coveragex.api.data.MethodHit;
-import io.github.kd656.coveragex.api.data.ProbeHit;
 import io.github.kd656.coveragex.api.data.ProbeMetadata;
-import io.github.kd656.coveragex.api.data.ProbeMetadata.BranchDirection;
 import io.github.kd656.coveragex.api.data.ProbeMetadata.BranchProbe;
 import io.github.kd656.coveragex.api.data.ProbeMetadata.MethodProbe;
 import io.github.kd656.coveragex.core.report.ReportConfig;
@@ -20,7 +18,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.stream.Collectors;
+
+import io.github.kd656.coveragex.core.report.model.BranchMetricsBuilder;
 
 public class ReportingService {
 
@@ -94,7 +93,7 @@ public class ReportingService {
         Map<String, MethodProbe> methodProbeByKey = new LinkedHashMap<>();
         Map<String, List<ProbeMetadata>> probesByKey = new LinkedHashMap<>();
         Map<Integer, List<ProbeMetadata>> probesByLine = new HashMap<>();
-        Map<String, Map<Integer, List<BranchProbe>>> branchByMethodLine = new LinkedHashMap<>();
+        List<BranchProbe> allBranchProbes = new ArrayList<>();
         long totalBranches = 0, coveredBranches = 0, coveredMethods = 0;
 
         for (ProbeMetadata pm : metadata) {
@@ -124,14 +123,11 @@ public class ReportingService {
             if (pm instanceof BranchProbe bp) {
                 totalBranches++;
                 if (isProbeHit(bp.probeId(), probeHits)) coveredBranches++;
-                branchByMethodLine
-                    .computeIfAbsent(bp.methodName(), k -> new LinkedHashMap<>())
-                    .computeIfAbsent(bp.line(), k -> new ArrayList<>())
-                    .add(bp);
+                allBranchProbes.add(bp);
             }
         }
 
-        List<BranchResult> branchResults = buildBranchResults(branchByMethodLine, probeHits, cc.hits());
+        List<BranchResult> branchResults = BranchMetricsBuilder.build(allBranchProbes, probeHits, cc.hits());
         List<LineStatus> lineStatuses = buildLineStatuses(probesByLine, probeHits);
         List<MethodMetrics> methodMetricsList = buildMethodMetrics(
             probesByKey, methodProbeByKey, probeHits, entryProbes);
@@ -154,50 +150,6 @@ public class ReportingService {
         return new ClassMetrics(classId, simpleClassName(classId), packageName(classId),
             linePct, branchPct, methodPct,
             methodMetricsList, branchResults, lineStatuses, metadata, cc.testAttribution());
-    }
-
-    private List<BranchResult> buildBranchResults(
-            Map<String, Map<Integer, List<BranchProbe>>> byMethodLine,
-            boolean[] probeHits,
-            Map<Integer, ProbeHit> hits) {
-
-        List<BranchResult> results = new ArrayList<>();
-
-        for (Map.Entry<String, Map<Integer, List<BranchProbe>>> methodEntry : byMethodLine.entrySet()) {
-            String methodName = methodEntry.getKey();
-            for (Map.Entry<Integer, List<BranchProbe>> lineEntry : methodEntry.getValue().entrySet()) {
-                int line = lineEntry.getKey();
-                List<BranchProbe> allProbes = lineEntry.getValue();
-
-                Map<BranchDirection, List<BranchProbe>> byDirection = allProbes.stream()
-                    .sorted(Comparator.comparingInt(BranchProbe::probeId))
-                    .collect(Collectors.groupingBy(BranchProbe::direction));
-                List<BranchProbe> trueProbes  = byDirection.getOrDefault(BranchDirection.TRUE,  Collections.emptyList());
-                List<BranchProbe> falseProbes = byDirection.getOrDefault(BranchDirection.FALSE, Collections.emptyList());
-
-                int pairCount = Math.max(trueProbes.size(), falseProbes.size());
-                for (int i = 0; i < pairCount; i++) {
-                    BranchProbe trueProbe  = i < trueProbes.size()  ? trueProbes.get(i)  : null;
-                    BranchProbe falseProbe = i < falseProbes.size() ? falseProbes.get(i) : null;
-
-                    boolean trueHit  = trueProbe  != null && isProbeHit(trueProbe.probeId(), probeHits);
-                    boolean falseHit = falseProbe != null && isProbeHit(falseProbe.probeId(), probeHits);
-                    int trueCount  = countOf(hits, trueProbe);
-                    int falseCount = countOf(hits, falseProbe);
-                    String condText = trueProbe != null ? trueProbe.conditionText()
-                        : (falseProbe != null ? falseProbe.conditionText() : "");
-
-                    results.add(new BranchResult(methodName, line, condText, trueHit, falseHit, trueCount, falseCount));
-                }
-            }
-        }
-        return results;
-    }
-
-    private int countOf(Map<Integer, ProbeHit> hits, BranchProbe probe) {
-        if (probe == null) return 0;
-        ProbeHit h = hits.get(probe.probeId());
-        return h == null ? 0 : h.count();
     }
 
     private List<LineStatus> buildLineStatuses(Map<Integer, List<ProbeMetadata>> probesByLine,

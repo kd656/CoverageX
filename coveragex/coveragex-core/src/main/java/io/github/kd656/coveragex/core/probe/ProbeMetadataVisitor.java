@@ -1,5 +1,6 @@
 package io.github.kd656.coveragex.core.probe;
 
+import io.github.kd656.coveragex.api.data.OperandKind;
 import io.github.kd656.coveragex.api.data.ProbeMetadata;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
@@ -23,6 +24,49 @@ public abstract class ProbeMetadataVisitor extends MethodVisitor {
 
     protected int currentLine = 0;
     protected int methodStartLine = -1;
+
+    /**
+     * Pending condition id for the branch currently being processed.
+     * Set by {@link #resolveConditionText(int, int)} (or an override), consumed
+     * in {@link #visitJumpInsn(int, Label)}, and reset to {@code -1} immediately
+     * after use so it cannot bleed into the next instruction.
+     */
+    protected int pendingConditionId = -1;
+
+    /**
+     * Pending operand kind for the branch currently being processed.
+     * Follows the same lifecycle as {@link #pendingConditionId}.
+     */
+    protected OperandKind pendingKind = OperandKind.UNKNOWN;
+
+    /**
+     * Pending arg labels for the branch currently being processed.
+     * Follows the same lifecycle as {@link #pendingConditionId}.
+     */
+    protected List<String> pendingArgLabels = List.of();
+
+    /**
+     * Source-level parameter names for the method currently being visited.
+     * Set by the source-aware override before the first {@code visitCode} call,
+     * or left as an empty list when no source map is available. Consumed by
+     * {@link #visitMaxs} to populate {@link ProbeMetadata.MethodProbe#parameterNames()}.
+     */
+    protected List<String> pendingParameterNames = List.of();
+
+    /**
+     * Local-variable slot indices holding the operand values stashed by the
+     * capture emitter for the branch currently being processed. Each slot holds
+     * a raw reference or a boxed primitive placed there directly by the capture
+     * emitter; serialisation to {@link String} happens later in
+     * {@link io.github.kd656.coveragex.core.collect.CommonCoverageDataCollector#attributeToTest}.
+     * {@code null} when no operand capture was performed (UNKNOWN / UNARY / BARE_REFERENCE
+     * operands, and the default path without a source map).
+     *
+     * <p>Consumed by {@link #visitJumpInsn} and forwarded to
+     * {@link #onBranchProbe}, then reset to {@code null} so it cannot
+     * bleed into the next instruction.</p>
+     */
+    protected int[] pendingOperandLocals = null;
 
     private int methodEntryProbeId = -1;
     private int segmentStartLine = -1;
@@ -87,12 +131,25 @@ public abstract class ProbeMetadataVisitor extends MethodVisitor {
         int trueProbeId = jumpMeansTrue ? jumpTakenProbeId : fallThroughProbeId;
         int falseProbeId = jumpMeansTrue ? fallThroughProbeId : jumpTakenProbeId;
 
-        metadata.set(falseProbeId, new ProbeMetadata.BranchProbe(
-                falseProbeId, methodName, branchLine, conditionText, ProbeMetadata.BranchDirection.FALSE));
-        metadata.set(trueProbeId, new ProbeMetadata.BranchProbe(
-                trueProbeId, methodName, branchLine, conditionText, ProbeMetadata.BranchDirection.TRUE));
+        // Consume the pending operand metadata set by resolveConditionText (or its override)
+        // and immediately reset to sentinels so they do not bleed into the next instruction.
+        int condId = pendingConditionId;
+        OperandKind kind = pendingKind;
+        List<String> argLabels = pendingArgLabels;
+        int[] operandLocals = pendingOperandLocals;
+        pendingConditionId = -1;
+        pendingKind = OperandKind.UNKNOWN;
+        pendingArgLabels = List.of();
+        pendingOperandLocals = null;
 
-        onBranchProbe(opcode, target, fallThroughProbeId, jumpTakenProbeId);
+        metadata.set(falseProbeId, new ProbeMetadata.BranchProbe(
+                falseProbeId, methodName, branchLine, conditionText,
+                ProbeMetadata.BranchDirection.FALSE, condId, kind, argLabels));
+        metadata.set(trueProbeId, new ProbeMetadata.BranchProbe(
+                trueProbeId, methodName, branchLine, conditionText,
+                ProbeMetadata.BranchDirection.TRUE, condId, kind, argLabels));
+
+        onBranchProbe(opcode, target, fallThroughProbeId, jumpTakenProbeId, operandLocals);
     }
 
     @Override
@@ -118,7 +175,9 @@ public abstract class ProbeMetadataVisitor extends MethodVisitor {
         if (methodEntryProbeId >= 0 && methodEntryProbeId < metadata.size()) {
             int startLine = methodStartLine == -1 ? 0 : methodStartLine;
             metadata.set(methodEntryProbeId,
-                    new ProbeMetadata.MethodProbe(methodEntryProbeId, methodName, startLine, currentLine));
+                    new ProbeMetadata.MethodProbe(
+                            methodEntryProbeId, methodName, startLine, currentLine,
+                            pendingParameterNames));
         }
         super.visitMaxs(maxStack, maxLocals);
     }
@@ -159,6 +218,19 @@ public abstract class ProbeMetadataVisitor extends MethodVisitor {
 
     protected abstract void onSegmentProbe(int probeId);
 
+    /**
+     * Invoked when a conditional branch probe pair has been allocated. Subclasses
+     * should emit or record the probe bytecode as appropriate.
+     *
+     * @param opcode             the original conditional-jump opcode
+     * @param originalTarget     the original jump target label
+     * @param fallThroughProbeId probe id for the fall-through direction
+     * @param jumpTakenProbeId   probe id for the jump-taken direction
+     * @param operandLocals      local-variable slot indices holding pre-stashed
+     *                           operand values, or {@code null} when no capture
+     *                           was performed for this operand
+     */
     protected abstract void onBranchProbe(int opcode, Label originalTarget,
-                                          int fallThroughProbeId, int jumpTakenProbeId);
+                                          int fallThroughProbeId, int jumpTakenProbeId,
+                                          int[] operandLocals);
 }

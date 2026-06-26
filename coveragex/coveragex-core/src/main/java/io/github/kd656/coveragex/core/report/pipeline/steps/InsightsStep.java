@@ -4,6 +4,7 @@ import io.github.kd656.coveragex.core.insights.Insight;
 import io.github.kd656.coveragex.core.insights.Severity;
 import io.github.kd656.coveragex.core.report.model.BranchResult;
 import io.github.kd656.coveragex.core.report.model.ClassMetrics;
+import io.github.kd656.coveragex.core.report.model.ConditionCase;
 import io.github.kd656.coveragex.core.report.model.Coverage;
 import io.github.kd656.coveragex.core.report.model.MethodMetrics;
 import io.github.kd656.coveragex.core.report.model.ReportModel;
@@ -67,7 +68,8 @@ public class InsightsStep extends ReportPipelineStep {
         return insights;
     }
 
-    private List<Insight> analyzeMethod(String classId, MethodMetrics methodMetrics, List<BranchResult> branches) {
+    private List<Insight> analyzeMethod(String classId, MethodMetrics methodMetrics,
+                                         List<BranchResult> branches) {
         List<Insight> insights = new ArrayList<>();
 
         boolean methodHit = methodMetrics.hitCount() > 0;
@@ -82,30 +84,36 @@ public class InsightsStep extends ReportPipelineStep {
                     : "Add a test that calls a method " + methodMetrics.methodName() + "() with representative arguments."));
         }
 
-        // Branch-level insights
-        for (BranchResult branchResult : branches) {
-            if (!branchResult.trueHit() && !branchResult.falseHit()) {
-                insights.add(new Insight(classId, methodMetrics.methodName(), branchResult.line(),
-                    "ZERO_BRANCH_COVERAGE", Severity.CRITICAL,
-                    "Branch never exercised in either direction",
-                    "Add tests that make this condition both true and false."));
-            } else if (branchResult.trueHit() && !branchResult.falseHit()) {
-                insights.add(new Insight(classId, methodMetrics.methodName(), branchResult.line(),
-                    "MISSING_BRANCH_FALSE", Severity.WARNING,
-                    "FALSE branch never taken",
-                    "Add a test that makes this condition false."));
-                addPathInsight(insights, classId, methodMetrics.methodName(), branchResult.line(), branchResult.conditionText(), false);
-            } else if (!branchResult.trueHit() && branchResult.falseHit()) {
-                insights.add(new Insight(classId, methodMetrics.methodName(), branchResult.line(),
-                    "MISSING_BRANCH_TRUE", Severity.WARNING,
-                    "TRUE branch never taken",
-                    "Add a test that makes this condition true."));
-                addPathInsight(insights, classId, methodMetrics.methodName(), branchResult.line(), branchResult.conditionText(), true);
+        // Branch-level insights — one insight per ConditionCase
+        for (BranchResult br : branches) {
+            for (ConditionCase cc : br.conditions()) {
+                boolean trueHit  = cc.trueDirection().hit();
+                boolean falseHit = cc.falseDirection().hit();
+                String condText  = cc.conditionText();
+
+                if (!trueHit && !falseHit) {
+                    insights.add(new Insight(classId, methodMetrics.methodName(), br.line(),
+                        "ZERO_BRANCH_COVERAGE", Severity.CRITICAL,
+                        "Branch never exercised in either direction",
+                        "Add tests that make this condition both true and false."));
+                } else if (trueHit && !falseHit) {
+                    insights.add(new Insight(classId, methodMetrics.methodName(), br.line(),
+                        "MISSING_BRANCH_FALSE", Severity.WARNING,
+                        "FALSE branch never taken",
+                        "Add a test that makes this condition false."));
+                    addPathInsight(insights, classId, methodMetrics.methodName(), br.line(), condText, false);
+                } else if (!trueHit && falseHit) {
+                    insights.add(new Insight(classId, methodMetrics.methodName(), br.line(),
+                        "MISSING_BRANCH_TRUE", Severity.WARNING,
+                        "TRUE branch never taken",
+                        "Add a test that makes this condition true."));
+                    addPathInsight(insights, classId, methodMetrics.methodName(), br.line(), condText, true);
+                }
             }
         }
 
         int totalInvocations = methodMetrics.hitCount();
-        int uniqueArgCombos = methodMetrics.invocations().size();
+        int uniqueArgCombos  = methodMetrics.invocations().size();
 
         // HIGH_COMPLEXITY_LOW_COVERAGE
         if (methodMetrics.branchProbeCount() >= 4) {
@@ -136,7 +144,8 @@ public class InsightsStep extends ReportPipelineStep {
         }
 
         // OVER_TESTED
-        boolean fullProbeCoverage = methodMetrics.probeCount() > 0 && methodMetrics.hitProbeCount() == methodMetrics.probeCount();
+        boolean fullProbeCoverage = methodMetrics.probeCount() > 0
+            && methodMetrics.hitProbeCount() == methodMetrics.probeCount();
         if (fullProbeCoverage && totalInvocations > 50 && uniqueArgCombos <= 2) {
             insights.add(new Insight(classId, methodMetrics.methodName(), methodMetrics.startLine(),
                 "OVER_TESTED", Severity.INFO,
@@ -153,8 +162,9 @@ public class InsightsStep extends ReportPipelineStep {
         }
 
         // FULL_BRANCH_COVERAGE
-        boolean allBranchesCovered = !branches.isEmpty() &&
-            branches.stream().allMatch(br -> br.trueHit() && br.falseHit());
+        boolean allBranchesCovered = !branches.isEmpty() && branches.stream()
+            .flatMap(br -> br.conditions().stream())
+            .allMatch(cc -> cc.trueDirection().hit() && cc.falseDirection().hit());
         if (allBranchesCovered) {
             insights.add(new Insight(classId, methodMetrics.methodName(), methodMetrics.startLine(),
                 "FULL_BRANCH_COVERAGE", Severity.POSITIVE,
@@ -185,7 +195,7 @@ public class InsightsStep extends ReportPipelineStep {
     }
 
     private void addPathInsight(List<Insight> insights, String classId, String methodName,
-                                int line, String condText, boolean missedTrue) {
+                                 int line, String condText, boolean missedTrue) {
         if (condText == null) return;
         if (condText.contains("null")) {
             insights.add(new Insight(classId, methodName, line,

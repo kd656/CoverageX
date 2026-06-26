@@ -94,23 +94,64 @@ public final class CommonCoverageDataCollector implements CoverageDataCollector 
     }
 
     /**
-     * Records a probe hit with optional method-entry arguments.
+     * Records a method-entry probe hit together with the captured argument
+     * values. Only method-entry hits contribute to the per-method invocation
+     * report.
      *
      * @param classId    the internal class name
-     * @param methodName the simple method name (for example {@code doSomething})
+     * @param methodName the simple method name (e.g. {@code doSomething})
      * @param probeId    the probe index within the class
-     * @param args       boxed argument values for entry probes, or {@code null} for non-entry probes
+     * @param args       the boxed argument values, never {@code null}
      */
-    public void recordHit(String classId, String methodName, int probeId, Object[] args) {
+    public void recordMethodEntry(String classId, String methodName,
+                                   int probeId, Object[] args) {
+        markHit(classId, probeId);
+        recordInvocationEntry(classId, methodName, probeId, args);
+        attributeToTest(classId, probeId, args);
+    }
+
+    /**
+     * Records a branch-direction probe hit together with any operand values
+     * that the capture emitter stashed (may be an empty array when no source
+     * map was available at instrumentation time).
+     *
+     * @param classId       the internal class name
+     * @param probeId       the probe index within the class
+     * @param operandValues the captured operand values, never {@code null}
+     */
+    public void recordBranchHit(String classId, int probeId, Object[] operandValues) {
+        markHit(classId, probeId);
+        attributeToTest(classId, probeId, operandValues);
+    }
+
+    /**
+     * Records a probe hit that carries no payload — return, throw, or segment
+     * probes.
+     *
+     * @param classId the internal class name
+     * @param probeId the probe index within the class
+     */
+    public void recordSimpleHit(String classId, int probeId) {
+        markHit(classId, probeId);
+    }
+
+    /**
+     * Marks the probe as hit and increments its counter. Shared preamble for
+     * every kind of probe.
+     */
+    private void markHit(String classId, int probeId) {
         markProbeAsHit(classId, probeId);
         incrementProbeCounter(classId, probeId);
+    }
 
-        if (args != null) {
-            recordMethodEntry(classId, methodName, probeId, args);
-        }
-
+    /**
+     * Attributes the probe hit to the calling thread's test-execution context,
+     * when one is available. The supplied payload becomes the dedup key for
+     * the attribution row (alongside {@code probeId}).
+     */
+    private void attributeToTest(String classId, int probeId, Object[] payload) {
         contextProvider.get().ifPresent(ctx ->
-                tracker.record(classId, probeId, toNullableStrings(args), ctx));
+                tracker.record(classId, probeId, toNullableStrings(payload), ctx));
     }
 
     private void incrementProbeCounter(String classId, int probeId) {
@@ -244,7 +285,7 @@ public final class CommonCoverageDataCollector implements CoverageDataCollector 
         probeHits[probeId] = true;
     }
 
-    private void recordMethodEntry(String classId, String methodName, int probeId, Object[] args) {
+    private void recordInvocationEntry(String classId, String methodName, int probeId, Object[] args) {
         ClassCoverageState state = classesById.get(classId);
         if (state == null) {
             return;

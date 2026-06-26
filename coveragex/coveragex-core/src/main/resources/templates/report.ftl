@@ -346,6 +346,17 @@
       max-width: 140px; overflow: hidden; text-overflow: ellipsis;
       white-space: nowrap; vertical-align: middle;
     }
+    #invocation-popover td.inv-param-cell {
+      font-family: var(--mono); font-size: 11px; color: var(--text-muted);
+      max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #invocation-popover td.inv-param-cell .arg-tag {
+      display: inline-block; background: rgba(255,255,255,.06);
+      border: 1px solid var(--border); border-radius: 3px;
+      padding: 0 4px; margin: 1px 2px 1px 0; font-size: 10px;
+      max-width: 120px; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; vertical-align: middle;
+    }
     #invocation-popover .inv-footer {
       padding: 7px 14px; border-top: 1px solid var(--border); font-size: 11px;
       color: var(--text-muted); background: rgba(0,0,0,.15);
@@ -388,17 +399,64 @@
     #branch-popover .bp-hint .bh-icon { font-size: 13px; margin-top: 1px; }
     #branch-popover .bp-hint .bh-text { color: var(--text-muted); line-height: 1.5; }
     #branch-popover .bp-hint .bh-text strong { color: var(--text); }
-    #branch-popover .bp-tests { padding: 0 14px 10px; display: flex; flex-direction: column; gap: 4px; }
-    #branch-popover .bp-tests .bpt-label {
-      font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
-      color: var(--text-muted); margin-bottom: 4px;
+    #branch-popover .bp-summary {
+      display: flex; gap: 16px; padding: 10px 14px;
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      background: rgba(0,0,0,.2);
     }
-    #branch-popover .bp-test-row {
-      display: flex; align-items: center; gap: 8px; padding: 5px 8px;
-      border-radius: 4px; background: rgba(255,255,255,.03);
+    #branch-popover .bp-stat { display: flex; flex-direction: column; gap: 2px; }
+    #branch-popover .bp-stat .bs-val { font-size: 18px; font-weight: 700; color: #89b4fa; }
+    #branch-popover .bp-stat .bs-lbl {
+      font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px;
     }
-    #branch-popover .bp-test-row .bptr-name { font-family: var(--mono); font-size: 11px; flex: 1; color: var(--text); }
-    #branch-popover .bp-test-row .bptr-count { font-size: 11px; font-weight: 700; color: rgba(137,180,250,.8); }
+    #branch-popover .bp-footer {
+      padding: 7px 14px; border-bottom: 1px solid var(--border); font-size: 11px;
+      color: var(--text-muted); background: rgba(0,0,0,.15);
+      display: flex; align-items: center; gap: 6px;
+    }
+    #branch-popover .bp-footer .dot {
+      width: 6px; height: 6px; border-radius: 50%; background: #89b4fa; flex-shrink: 0;
+    }
+    #branch-popover .bp-table-wrap { max-height: 260px; overflow-y: auto; }
+    #branch-popover .bp-table-wrap::-webkit-scrollbar { width: 4px; }
+    #branch-popover .bp-table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    #branch-popover table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    #branch-popover thead tr { background: rgba(255,255,255,.03); border-bottom: 1px solid var(--border); }
+    #branch-popover th {
+      padding: 6px 14px; text-align: left; font-size: 10px;
+      font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted);
+    }
+    #branch-popover tbody tr { border-bottom: 1px solid rgba(255,255,255,.04); transition: background .08s; }
+    #branch-popover tbody tr:last-child { border-bottom: none; }
+    #branch-popover tbody tr:hover { background: var(--bg-hover); }
+    #branch-popover td { padding: 7px 14px; vertical-align: middle; }
+    #branch-popover td.test-name { font-family: var(--mono); font-size: 11px; color: var(--text); }
+    #branch-popover td.bp-count {
+      text-align: right; font-weight: 700; white-space: nowrap;
+      color: #89b4fa; font-size: 12px; min-width: 36px;
+    }
+    #branch-popover td.bp-dir-cell { text-align: center; white-space: nowrap; }
+    #branch-popover td.bp-op-cell {
+      font-family: var(--mono); font-size: 11px; color: var(--text-muted);
+      max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #branch-popover td.bp-op-cell .arg-tag {
+      display: inline-block; background: rgba(255,255,255,.06);
+      border: 1px solid var(--border); border-radius: 3px;
+      padding: 0 4px; margin: 1px 2px 1px 0; font-size: 10px;
+      max-width: 120px; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; vertical-align: middle;
+    }
+    #branch-popover .bp-dir-chip {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; border-radius: 3px; font-size: 10px;
+      font-weight: 700; font-family: var(--mono);
+    }
+    #branch-popover .bp-dir-chip.t { background: rgba(46,204,113,.25); color: #a6e3a1; border: 1px solid rgba(46,204,113,.4); }
+    #branch-popover .bp-dir-chip.f { background: rgba(231,76,60,.25); color: #f38ba8; border: 1px solid rgba(231,76,60,.4); }
+    #branch-popover .bp-empty-row td {
+      text-align: center; color: var(--text-dim); padding: 14px; font-size: 11px;
+    }
   </style>
 </head>
 <body>
@@ -544,6 +602,7 @@ const CoverageX = {
           kind: 'method',
           method: mm.n,
           total: t,
+          parameterNames: mm.params || [],
           invocations: (mm.inv || []).map(inv => ({
             tests: inv.ts || [],
             args: inv.a || [],
@@ -568,12 +627,10 @@ const CoverageX = {
               trueCount:  c.tc ?? 0,
               falseCount: c.fc ?? 0,
               trueHint:  c.thi || '',
-              falseHint: c.fhi || ''
-            })),
-            tests: (badge.tests || []).map(t => ({
-              test: t.t,
-              testClass: t.cls,
-              count: t.cnt
+              falseHint: c.fhi || '',
+              trueTests:  (c.tt || []).map(t => ({ testMethodName: t.t, count: t.cnt, argValues: t.args || [] })),
+              falseTests: (c.ft || []).map(t => ({ testMethodName: t.t, count: t.cnt, argValues: t.args || [] })),
+              operandArgs: c.ops || []
             }))
           };
         });
@@ -657,9 +714,36 @@ function showInvocationPopover(event, trigger) {
     ? uniqueTests + ' test(s) covered this method'
     : 'Test tracking requires the CoverageX test listener.';
 
+  const paramNames = data.parameterNames || [];
+
+  // Rebuild per-parameter header columns.
+  const headRow = document.getElementById('inv-thead-row');
+  headRow.querySelectorAll('th.inv-param-th').forEach(el => el.remove());
+  if (paramNames.length > 0) {
+    paramNames.forEach(label => {
+      const th = document.createElement('th');
+      th.className = 'inv-param-th';
+      th.textContent = label;
+      headRow.appendChild(th);
+    });
+  } else {
+    const th = document.createElement('th');
+    th.className = 'inv-param-th inv-args-fallback';
+    th.textContent = 'Arguments';
+    headRow.appendChild(th);
+  }
+
   const tbody = document.getElementById('inv-tbody');
   tbody.innerHTML = invocations.map(inv => {
     const testLabel = inv.tests.length ? inv.tests.join(', ') : '';
+    if (paramNames.length > 0) {
+      const paramCells = paramNames.map((_, i) => renderInvParamCell((inv.args || [])[i])).join('');
+      return '<tr>'
+        + '<td class="test-name">' + esc(testLabel) + '</td>'
+        + '<td class="inv-count">' + inv.count + '×</td>'
+        + paramCells
+        + '</tr>';
+    }
     const args = (inv.args || []).map(a => {
       if (a === null)  return '<span class="arg-tag" title="&lt;null&gt;">&lt;null&gt;</span>';
       if (a === '')    return '<span class="arg-tag" title="&lt;empty&gt;">&lt;empty&gt;</span>';
@@ -680,7 +764,6 @@ function showInvocationPopover(event, trigger) {
 
 /* ===== Branch popover ===== */
 let _bpConditions = [];
-let _bpTests = [];
 function showBranchPopover(event, trigger) {
   event.stopPropagation();
   const pop = document.getElementById('branch-popover');
@@ -690,9 +773,7 @@ function showBranchPopover(event, trigger) {
   const data = CoverageX.popovers[trigger.dataset.pid];
   const conditions = data.conditions;
   const direction  = data.direction;
-  const tests      = data.tests;
   _bpConditions = conditions;
-  _bpTests = tests;
 
   document.getElementById('bp-line-label').textContent = 'line ' + trigger.closest('tr').dataset.line;
   const defaultIdx = conditions.findIndex(c => direction === 'TRUE' ? !c.trueHit : !c.falseHit);
@@ -708,7 +789,7 @@ function showBranchPopover(event, trigger) {
     sel.innerHTML = conditions.map((c, i) => '<option value="' + i + '">' + esc(c.conditionText) + '</option>').join('');
     sel.selectedIndex = selectedIdx;
   }
-  renderConditionPanels(conditions[selectedIdx], tests);
+  renderConditionPanels(conditions[selectedIdx]);
   pop._trigger = trigger;
   openPopover = pop;
   positionPopover(pop, trigger);
@@ -716,10 +797,10 @@ function showBranchPopover(event, trigger) {
 
 function onBranchConditionChange() {
   const idx = parseInt(document.getElementById('bp-condition-select').value, 10);
-  renderConditionPanels(_bpConditions[idx], _bpTests);
+  renderConditionPanels(_bpConditions[idx]);
 }
 
-function renderConditionPanels(cond, tests) {
+function renderConditionPanels(cond) {
   const trueDir = document.getElementById('bp-true-dir');
   trueDir.className = 'bp-dir ' + (cond.trueHit ? 'hit' : 'miss');
   document.getElementById('bp-true-status').textContent = cond.trueHit ? '✓ taken' : '✗ never';
@@ -739,21 +820,98 @@ function renderConditionPanels(cond, tests) {
     hintIcon.style.color = bothCovered ? 'var(--badge-pos)' : 'var(--badge-warn)';
     hintText.innerHTML = esc(hint);
   } else { hintRow.style.display = 'none'; }
-  const testsSection = document.getElementById('bp-tests-section');
-  const testsList    = document.getElementById('bp-tests-list');
-  if (tests && tests.length > 0) {
-    testsSection.style.display = '';
-    testsList.innerHTML = tests.map(t =>
-      '<div class="bp-test-row"><span class="bptr-name">' + esc(t.test)
-      + '<br><span style="color:var(--text-muted);font-size:10px">' + esc(t.testClass) + '</span></span>'
-      + '<span class="bptr-count">' + t.count + '×</span></div>'
-    ).join('');
-    document.querySelector('#bp-tests-section .bpt-label').textContent = 'Tests that hit this branch';
-  } else {
-    testsSection.style.display = '';
-    testsList.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:6px 0">No tests hit this branch direction.</div>';
-    document.querySelector('#bp-tests-section .bpt-label').textContent = 'Tests';
+  renderBranchTestsTable(cond);
+}
+
+function renderBranchTestsTable(cond) {
+  const trueTests  = cond.trueTests  || [];
+  const falseTests = cond.falseTests || [];
+  const ops        = cond.operandArgs || [];
+
+  const uniqueTests = new Set();
+  trueTests.forEach(t => uniqueTests.add(t.testMethodName));
+  falseTests.forEach(t => uniqueTests.add(t.testMethodName));
+  const dirsCovered = (cond.trueHit ? 1 : 0) + (cond.falseHit ? 1 : 0);
+
+  document.getElementById('bp-unique-tests').textContent = uniqueTests.size;
+  document.getElementById('bp-directions-covered').textContent = dirsCovered + '/2';
+
+  const footerNote = document.getElementById('bp-footer-note');
+  footerNote.textContent = uniqueTests.size > 0
+      ? uniqueTests.size + ' test(s) covered this branch'
+      : 'Test tracking requires the CoverageX test listener.';
+
+  // Rebuild header: drop any previously-injected operand <th>s, then re-inject one per operand label.
+  const headRow = document.getElementById('bp-tests-thead-row');
+  headRow.querySelectorAll('th.bp-op-th').forEach(el => el.remove());
+  ops.forEach(label => {
+    const th = document.createElement('th');
+    th.className = 'bp-op-th';
+    th.textContent = label;
+    headRow.appendChild(th);
+  });
+
+  const rows = [];
+  trueTests.forEach(t  => rows.push({ test: t, dir: 'T' }));
+  falseTests.forEach(t => rows.push({ test: t, dir: 'F' }));
+
+  const tbody = document.getElementById('bp-tests-tbody');
+  if (rows.length === 0) {
+    const colspan = 3 + ops.length;
+    tbody.innerHTML = '<tr class="bp-empty-row"><td colspan="' + colspan
+        + '">No tests covered this branch.</td></tr>';
+    return;
   }
+
+  tbody.innerHTML = rows.map(r => {
+    const dirChip = '<span class="bp-dir-chip ' + r.dir.toLowerCase() + '">'
+        + r.dir + '</span>';
+    const values = r.test.argValues || [];
+    const opCells = ops.map((_, i) => renderOperandCell(values[i])).join('');
+    return '<tr>'
+        + '<td class="test-name">' + esc(r.test.testMethodName) + '</td>'
+        + '<td class="bp-count">' + r.test.count + '×</td>'
+        + '<td class="bp-dir-cell">' + dirChip + '</td>'
+        + opCells
+        + '</tr>';
+  }).join('');
+}
+
+function renderOperandCell(value) {
+  if (value === undefined) {
+    return '<td class="bp-op-cell"><span style="color:var(--text-dim)">--</span></td>';
+  }
+  if (value === null) {
+    return '<td class="bp-op-cell"><span class="arg-tag" title="&lt;null&gt;">&lt;null&gt;</span></td>';
+  }
+  if (value === '') {
+    return '<td class="bp-op-cell"><span class="arg-tag" title="&lt;empty&gt;">&lt;empty&gt;</span></td>';
+  }
+  return '<td class="bp-op-cell"><span class="arg-tag" title="' + escAttr(value) + '">'
+      + esc(truncate(value, 22)) + '</span></td>';
+}
+
+/**
+ * Renders one per-parameter cell in the invocation popover table.
+ * Mirrors {@link renderOperandCell} but uses the {@code inv-param-cell} CSS class.
+ */
+function renderInvParamCell(value) {
+  if (value === undefined) {
+    return '<td class="inv-param-cell"><span style="color:var(--text-dim)">--</span></td>';
+  }
+  if (value === null) {
+    return '<td class="inv-param-cell"><span class="arg-tag" title="&lt;null&gt;">&lt;null&gt;</span></td>';
+  }
+  if (value === '') {
+    return '<td class="inv-param-cell"><span class="arg-tag" title="&lt;empty&gt;">&lt;empty&gt;</span></td>';
+  }
+  const objRef = /^([\w.$]+)@[0-9a-f]+$/i.exec(value);
+  if (objRef) {
+    return '<td class="inv-param-cell"><span class="arg-tag" title="' + escAttr(value) + '">'
+        + esc(truncate(objRef[1], 22)) + '</span></td>';
+  }
+  return '<td class="inv-param-cell"><span class="arg-tag" title="' + escAttr(value) + '">'
+      + esc(truncate(value, 22)) + '</span></td>';
 }
 
 /* ===== Shared helpers ===== */

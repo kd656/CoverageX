@@ -2,6 +2,7 @@ package io.github.kd656.coveragex.core.report.pipeline.steps;
 
 import io.github.kd656.coveragex.core.report.model.BranchResult;
 import io.github.kd656.coveragex.core.report.model.ClassMetrics;
+import io.github.kd656.coveragex.core.report.model.ConditionCase;
 import io.github.kd656.coveragex.core.report.model.MethodMetrics;
 import io.github.kd656.coveragex.core.report.model.ReportModel;
 import io.github.kd656.coveragex.core.report.pipeline.PipelineStepId;
@@ -33,6 +34,7 @@ public class SuggestionsStep extends ReportPipelineStep {
                 if (mm.isImplicitDefaultConstructor()) {
                     continue;
                 }
+
                 // Method never invoked
                 if (mm.hitCount() == 0) {
                     suggestions.add(new Suggestion(cm.classId(), mm.methodName(), mm.startLine(),
@@ -41,14 +43,20 @@ public class SuggestionsStep extends ReportPipelineStep {
                             : "Add a basic happy-path test that calls " + mm.methodName() + "()."));
                 }
 
-                // Branch with one direction uncovered
+                // Branch with one direction uncovered — one suggestion per ConditionCase
                 for (BranchResult br : branchesByMethod.getOrDefault(mm.methodName(), List.of())) {
-                    if (br.trueHit() && !br.falseHit()) {
-                        suggestions.add(new Suggestion(cm.classId(), mm.methodName(), br.line(),
-                            "Add a test that makes '" + br.conditionText() + "' evaluate to false."));
-                    } else if (!br.trueHit() && br.falseHit()) {
-                        suggestions.add(new Suggestion(cm.classId(), mm.methodName(), br.line(),
-                            "Add a test that makes '" + br.conditionText() + "' evaluate to true."));
+                    for (ConditionCase cc : br.conditions()) {
+                        boolean trueHit  = cc.trueDirection().hit();
+                        boolean falseHit = cc.falseDirection().hit();
+                        String condText  = cc.conditionText();
+
+                        if (trueHit && !falseHit) {
+                            suggestions.add(new Suggestion(cm.classId(), mm.methodName(), br.line(),
+                                "Add a test that makes '" + condText + "' evaluate to false."));
+                        } else if (!trueHit && falseHit) {
+                            suggestions.add(new Suggestion(cm.classId(), mm.methodName(), br.line(),
+                                "Add a test that makes '" + condText + "' evaluate to true."));
+                        }
                     }
                 }
 

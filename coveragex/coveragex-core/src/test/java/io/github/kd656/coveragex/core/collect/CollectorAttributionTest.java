@@ -31,7 +31,7 @@ class CollectorAttributionTest {
     void snapshotCarriesEmptyAttributionWhenProviderYieldsNothing() {
         var collector = new CommonCoverageDataCollector(new BinaryDataWriter());
         collector.registerClass("com/example/Foo", 1, metadata(1));
-        collector.recordHit("com/example/Foo", "doX", 0, null);
+        collector.recordSimpleHit("com/example/Foo", 0);
 
         assertThat(collector.snapshotTracker()).isEqualTo(TestTrackingSnapshot.empty());
         ClassCoverage cc = collector.snapshot().classes().get("com/example/Foo");
@@ -46,7 +46,7 @@ class CollectorAttributionTest {
                 () -> Optional.ofNullable(contextRef.get()));
 
         collector.registerClass("com/example/Bar", 1, metadata(1));
-        collector.recordHit("com/example/Bar", "doY", 0, new Object[]{1});
+        collector.recordMethodEntry("com/example/Bar", "doY", 0, new Object[]{1});
 
         ExecutionData exec = collector.snapshot();
         ClassCoverage cc = exec.classes().get("com/example/Bar");
@@ -63,7 +63,7 @@ class CollectorAttributionTest {
                 new BinaryDataWriter(),
                 () -> Optional.ofNullable(contextRef.get()));
         collector.registerClass("com/example/Baz", 1, metadata(1));
-        collector.recordHit("com/example/Baz", "m", 0, null);
+        collector.recordSimpleHit("com/example/Baz", 0);
 
         collector.reset();
 
@@ -81,7 +81,7 @@ class CollectorAttributionTest {
 
         try (var scope = CoverageDataCollectorDelegate.contextRegistry()
                 .scope(() -> Optional.of(stubContext("Wired#test")))) {
-            collector.recordHit("com/example/Qux", "m", 0, null);
+            collector.recordBranchHit("com/example/Qux", 0, new Object[0]);
         }
 
         ClassCoverage cc = collector.snapshot().classes().get("com/example/Qux");
@@ -92,7 +92,7 @@ class CollectorAttributionTest {
 
     private List<ProbeMetadata> metadata(int count) {
         return java.util.stream.IntStream.range(0, count)
-                .<ProbeMetadata>mapToObj(i -> new ProbeMetadata.MethodProbe(i, "m" + i, 0, 0))
+                .<ProbeMetadata>mapToObj(i -> new ProbeMetadata.MethodProbe(i, "m" + i, 0, 0, List.of()))
                 .toList();
     }
 

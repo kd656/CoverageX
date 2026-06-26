@@ -6,6 +6,7 @@ import io.github.kd656.coveragex.api.data.ClassTestCoverage;
 import io.github.kd656.coveragex.api.data.ExecutionData;
 import io.github.kd656.coveragex.api.data.InvocationRecord;
 import io.github.kd656.coveragex.api.data.MethodHit;
+import io.github.kd656.coveragex.api.data.OperandKind;
 import io.github.kd656.coveragex.api.data.ProbeHit;
 import io.github.kd656.coveragex.api.data.ProbeMetadata;
 import io.github.kd656.coveragex.api.io.CoverageDataReader;
@@ -89,14 +90,86 @@ public final class BinaryDataReader implements CoverageDataReader<ExecutionData>
         String tag        = dis.readUTF();
         String methodName = dis.readUTF();
         return switch (tag) {
-            case ProbeMetadata.MethodProbe.TAG  -> new ProbeMetadata.MethodProbe(probeId, methodName, dis.readInt(), dis.readInt());
-            case ProbeMetadata.BranchProbe.TAG  -> new ProbeMetadata.BranchProbe(probeId, methodName, dis.readInt(),
-                                                        dis.readUTF(), ProbeMetadata.BranchDirection.valueOf(dis.readUTF()));
+            case ProbeMetadata.MethodProbe.TAG  -> readMethodProbe(dis, probeId, methodName);
+            case ProbeMetadata.BranchProbe.TAG  -> readBranchProbe(dis, probeId, methodName);
             case ProbeMetadata.ReturnProbe.TAG  -> new ProbeMetadata.ReturnProbe(probeId, methodName, dis.readInt());
             case ProbeMetadata.ThrowProbe.TAG   -> new ProbeMetadata.ThrowProbe (probeId, methodName, dis.readInt());
             case ProbeMetadata.SegmentProbe.TAG -> new ProbeMetadata.SegmentProbe(probeId, methodName, dis.readInt(), dis.readInt());
             default -> throw new IOException("Unknown probe type tag: " + tag);
         };
+    }
+
+    /**
+     * Reads a {@link ProbeMetadata.MethodProbe} from the stream.
+     *
+     * <p>Field order mirrors {@link ProbeMetadataSerializer#visit(ProbeMetadata.MethodProbe)}:</p>
+     * <ol>
+     *   <li>{@code int}    — start line</li>
+     *   <li>{@code int}    — end line</li>
+     *   <li>{@code int}    — parameter name count</li>
+     *   <li>{@code UTF}×N — parameter names</li>
+     * </ol>
+     *
+     * @param dis        the input stream positioned immediately after the common header
+     * @param probeId    the probe id already read from the common header
+     * @param methodName the method name already read from the common header
+     * @return the fully populated {@link ProbeMetadata.MethodProbe}
+     * @throws IOException if the stream cannot be read
+     */
+    private ProbeMetadata.MethodProbe readMethodProbe(DataInputStream dis,
+                                                      int probeId,
+                                                      String methodName) throws IOException {
+        int startLine = dis.readInt();
+        int endLine = dis.readInt();
+        int nameCount = dis.readInt();
+        List<String> parameterNames = new ArrayList<>(nameCount);
+        for (int i = 0; i < nameCount; i++) {
+            parameterNames.add(dis.readUTF());
+        }
+        return new ProbeMetadata.MethodProbe(probeId, methodName, startLine, endLine, parameterNames);
+    }
+
+    /**
+     * Reads a {@link ProbeMetadata.BranchProbe} from the stream.
+     *
+     * <p>Field order mirrors {@link ProbeMetadataSerializer#visit(ProbeMetadata.BranchProbe)}:</p>
+     * <ol>
+     *   <li>{@code int}    — source line</li>
+     *   <li>{@code UTF}    — condition text</li>
+     *   <li>{@code UTF}    — direction name</li>
+     *   <li>{@code int}    — condition id</li>
+     *   <li>{@code int}    — operand kind stable code (see {@link OperandKind#code()})</li>
+     *   <li>{@code int}    — arg label count</li>
+     *   <li>{@code UTF}×N — arg labels</li>
+     * </ol>
+     *
+     * @param dis        the input stream positioned immediately after the common header
+     * @param probeId    the probe id already read from the common header
+     * @param methodName the method name already read from the common header
+     * @return the fully populated {@link ProbeMetadata.BranchProbe}
+     * @throws IOException if the stream cannot be read
+     */
+    private ProbeMetadata.BranchProbe readBranchProbe(DataInputStream dis,
+                                                       int probeId,
+                                                       String methodName) throws IOException {
+        int line = dis.readInt();
+        String conditionText = dis.readUTF();
+        ProbeMetadata.BranchDirection direction = ProbeMetadata.BranchDirection.valueOf(dis.readUTF());
+        int conditionId = dis.readInt();
+        int kindCode = dis.readInt();
+        OperandKind kind;
+        try {
+            kind = OperandKind.fromCode(kindCode);
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Unknown OperandKind code: " + kindCode, e);
+        }
+        int labelCount = dis.readInt();
+        List<String> argLabels = new ArrayList<>(labelCount);
+        for (int i = 0; i < labelCount; i++) {
+            argLabels.add(dis.readUTF());
+        }
+        return new ProbeMetadata.BranchProbe(probeId, methodName, line, conditionText,
+                direction, conditionId, kind, argLabels);
     }
 
     private Map<Integer, MethodHit> readMethodHits(DataInputStream dis) throws IOException {

@@ -23,7 +23,7 @@ public class ProbeMetadataLabelFormatter implements ProbeMetadataVisitor<String>
     @Override
     public String visit(ProbeMetadata.MethodProbe p) {
         return String.format("[METHOD]  %s(): lines %d–%d   hits: 0",
-                p.methodName(), p.startLine(), p.endLine());
+                MethodNameFormatter.format(p.methodName()), p.startLine(), p.endLine());
     }
 
     @Override
@@ -45,6 +45,6 @@ public class ProbeMetadataLabelFormatter implements ProbeMetadataVisitor<String>
     @Override
     public String visit(ProbeMetadata.SegmentProbe p) {
         return String.format("[SEGMENT] %s(): lines %d–%d   hits: 0",
-                p.methodName(), p.startLine(), p.endLine());
+                MethodNameFormatter.format(p.methodName()), p.startLine(), p.endLine());
     }
 }
