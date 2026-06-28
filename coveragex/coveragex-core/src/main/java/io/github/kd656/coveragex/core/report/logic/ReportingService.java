@@ -12,7 +12,6 @@ import io.github.kd656.coveragex.core.report.ReportView;
 import io.github.kd656.coveragex.core.report.model.*;
 import io.github.kd656.coveragex.core.report.pipeline.ReportPipelineStep;
 import io.github.kd656.coveragex.core.report.pipeline.steps.*;
-import io.github.kd656.coveragex.core.report.views.ConsoleReportView;
 import io.github.kd656.coveragex.core.report.views.HtmlReportRenderer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,8 +28,7 @@ public class ReportingService {
 
     public ReportingService() {
         this(Map.of(
-            ReportingType.CONSOLE, new ConsoleReportView(),
-            ReportingType.HTML,    new HtmlReportRenderer()
+            ReportingType.HTML, new HtmlReportRenderer()
         ));
     }
 
