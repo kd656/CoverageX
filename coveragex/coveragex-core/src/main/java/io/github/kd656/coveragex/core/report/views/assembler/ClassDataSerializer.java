@@ -474,7 +474,7 @@ public class ClassDataSerializer {
             return "";
         }
         if (metrics.isConstructor()) {
-            return cm.simpleName() + "()";
+            return cm.simpleName();
         }
         return MethodNameFormatter.format(metrics.methodName());
     }

@@ -58,10 +58,10 @@ public class ReportMojo extends AbstractMojo {
 
     /**
      * Comma-separated list of report formats to generate.
-     * Supported values: {@code CONSOLE}, {@code HTML}.
-     * Default is {@code console}.
+     * Supported values: {@code HTML}.
+     * Default is {@code html}.
      */
-    @Parameter(property = "coveragex.reportFormats", defaultValue = "console")
+    @Parameter(property = "coveragex.reportFormats", defaultValue = "html")
     private String reportFormats;
 
     /**
