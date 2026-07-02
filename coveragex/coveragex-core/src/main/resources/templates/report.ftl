@@ -111,6 +111,14 @@
     .nav-folder.open > .nav-folder-row .nav-arrow { transform: rotate(90deg); }
     .nav-folder-children { display: none; }
     .nav-folder.open > .nav-folder-children { display: block; }
+    /* Module-level nav rows (scoped reports) */
+    .nav-module-row {
+      font-weight: 600; letter-spacing: .5px;
+      background: rgba(255,255,255,.02);
+      border-top: 1px solid var(--border);
+    }
+    .nav-module:first-of-type .nav-module-row { border-top: none; }
+    .nav-module-row .nav-name { color: var(--text); }
     .nav-item {
       display: flex; align-items: center; gap: 8px;
       padding: 7px 0; padding-left: calc(12px + var(--depth) * 14px);
@@ -461,7 +469,7 @@
 </head>
 <body>
 <@topbar.render model=report.topBar />
-<@nav.render tree=report.navTree />
+<@nav.render report=report />
 <main id="main">
   <div class="empty-state">
     <h2>Select a class</h2>
@@ -505,14 +513,17 @@ const CoverageX = {
     this._render(id, data);
   },
 
-  load(id) {
+  load(id, payloadPath) {
     this.requestedId = id;
     if (id === this.currentId) return;
     const cached = this.cache.get(id);
     if (cached) { this._render(id, cached); return; }
     this._showSpinner();
     const s = document.createElement('script');
-    s.src = 'classes/' + id + '.data.js';
+    // payloadPath comes from data-payload on the nav item (scoped reports use
+    // classes/<scopeId>/<sectionId>.data.js). Fall back to the flat layout when
+    // the caller did not pass one — e.g. a bookmarked call from user code.
+    s.src = payloadPath || ('classes/' + id + '.data.js');
     s.onerror = () => {
       if (this.requestedId === id) this._showError(id);
     };
@@ -944,8 +955,8 @@ function jumpNextUncovered() {
 }
 
 /* ===== Load class entry point ===== */
-function loadClass(id) {
-  CoverageX.load(id);
+function loadClass(id, payloadPath) {
+  CoverageX.load(id, payloadPath);
 }
 
 /* ===== Prev / Next navigation ===== */
@@ -954,10 +965,12 @@ function getClassOrder() {
     .map(el => el.dataset.section);
 }
 function navigateRelative(delta) {
-  const order = getClassOrder();
-  const idx = order.indexOf(CoverageX.currentId);
+  const items = [...document.querySelectorAll('#nav-list .nav-item[data-section]')];
+  const idx = items.findIndex(el => el.dataset.section === CoverageX.currentId);
   const next = idx + delta;
-  if (next >= 0 && next < order.length) loadClass(order[next]);
+  if (next >= 0 && next < items.length) {
+    loadClass(items[next].dataset.section, items[next].dataset.payload);
+  }
 }
 
 /* ===== Tree navigation ===== */

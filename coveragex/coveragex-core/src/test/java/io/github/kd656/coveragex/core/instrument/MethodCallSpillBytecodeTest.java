@@ -76,7 +76,7 @@ class MethodCallSpillBytecodeTest {
         SemanticIndex index = new SemanticIndex();
         new SourceCodeAnalyzer(new JavaParser(), index).scan(srcRoot);
 
-        classModel = index.getClasses().get(FIXTURE_CLASS);
+        classModel = index.getClasses().get(FIXTURE_INTERNAL);
         assertThat(classModel).as("Analyser must produce a ClassModel").isNotNull();
     }
 

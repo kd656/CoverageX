@@ -33,11 +33,12 @@
 <#macro renderFile node depth>
 <a class="nav-item" href="#"
    data-section="${node.sectionId}"
+   data-payload="${node.payloadPath}"
    data-has-crit="${node.hasCriticalInsight?string("1","")}"
    data-has-warn="${node.hasWarningInsight?string("1","")}"
    data-has-pos="${node.hasPositiveInsight?string("1","")}"
    style="--depth:${depth}"
-   onclick="loadClass('${node.sectionId}');return false;">
+   onclick="loadClass('${node.sectionId}','${node.payloadPath}');return false;">
   <span class="nav-name">${node.simpleName?html}</span>
   <span class="nav-pct ${u.pctClass(node.coveragePercent)}">${node.coveragePercent?round}%</span>
   <span class="nav-badges">

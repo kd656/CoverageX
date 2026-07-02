@@ -11,7 +11,7 @@ public final class SemanticIndex {
     /** Format version for coveragex.map */
     public final int version = 1;
 
-    /** className -> ClassModel */
+    /** internal-form class name (e.g. {@code com/example/Foo}) → {@link ClassModel}. */
     private final Map<String, ClassModel> classes = new LinkedHashMap<>();
 
     public ClassModel getOrCreateClass(String className, String sourceFile) {

@@ -21,7 +21,11 @@ public final class ClassCoverageFilter {
             "jdk.**",
             "sun.**",
             "com.sun.**",
-            "io.github.kd656.coveragex.**"
+            "io.github.kd656.coveragex.**",
+            "org.junit.**",
+            "junit.**",
+            "org.testng.**",
+            "org.opentest4j.**"
     );
 
     private final List<ClassNamePattern> includes;

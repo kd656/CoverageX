@@ -419,9 +419,14 @@ public final class SourceCodeAnalyzer implements SourceAnalyzer {
         }
 
         private String findClassName(Node n) {
+            // SemanticIndex keys are JVM internal names (e.g. "com/example/Foo").
+            // JavaParser's getFullyQualifiedName() returns dotted form, so convert
+            // once here at the write boundary; every downstream reader expects
+            // internal form and previously had to compensate with .replace('.', '/').
             return n.findAncestor(ClassOrInterfaceDeclaration.class)
                     .map(ClassOrInterfaceDeclaration::getFullyQualifiedName)
                     .flatMap(x -> x)
+                    .map(fqcn -> fqcn.replace('.', '/'))
                     .orElse(null);
         }
 

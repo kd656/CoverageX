@@ -15,7 +15,6 @@ import io.github.kd656.coveragex.core.report.model.MethodMetrics;
 import io.github.kd656.coveragex.core.report.model.ReportModel;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 
@@ -24,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ReportingServiceTest {
 
     @Test
-    void assignsOutOfOrderProbesToOverloadBySourceRange() throws Exception {
+    void assignsOutOfOrderProbesToOverloadBySourceRange() {
         List<ProbeMetadata> metadata = List.of(
             new ProbeMetadata.MethodProbe(0, "normalize", 10, 15, List.of("value")),
             new ProbeMetadata.BranchProbe(2, "normalize", 22, "value == null",
@@ -64,7 +63,7 @@ class ReportingServiceTest {
     }
 
     @Test
-    void branchResultsCarryRealInvocationCountsFromHitsMap() throws Exception {
+    void branchResultsCarryRealInvocationCountsFromHitsMap() {
         // Loop body executed 7 times → TRUE direction count = 7;
         // Loop exit taken once → FALSE direction count = 1.
         List<ProbeMetadata> metadata = List.of(
@@ -97,9 +96,7 @@ class ReportingServiceTest {
         assertThat(cc.falseDirection().count()).isEqualTo(1);
     }
 
-    private ReportModel buildInitialModel(ExecutionData data) throws Exception {
-        Method method = ReportingService.class.getDeclaredMethod("buildInitialModel", ExecutionData.class);
-        method.setAccessible(true);
-        return (ReportModel) method.invoke(new ReportingService(), data);
+    private ReportModel buildInitialModel(ExecutionData data) {
+        return new DefaultReportModelFactory().build(data);
     }
 }

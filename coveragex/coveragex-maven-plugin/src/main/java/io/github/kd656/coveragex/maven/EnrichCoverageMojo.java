@@ -9,10 +9,12 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.stream.Stream;
 
 @Mojo(name = "enrich", defaultPhase = LifecyclePhase.VERIFY, threadSafe = true)
 public class EnrichCoverageMojo extends AbstractMojo {
@@ -49,15 +51,20 @@ public class EnrichCoverageMojo extends AbstractMojo {
 
         Path dataFile = Paths.get(project.getBuild().getDirectory(), destFile);
         if (!Files.exists(dataFile)) {
-            log.warn("");
-            log.warn("========================================================");
-            log.warn("  No coverage data found for enrichment!");
-            log.warn("========================================================");
-            log.warn("");
-            log.warn("Coverage data file does not exist: " + dataFile);
-            log.warn("Run tests with coveragex:prepare-agent before coveragex:enrich.");
-            log.warn("");
-            log.warn("========================================================");
+            if (hasTestSources()) {
+                log.warn("");
+                log.warn("========================================================");
+                log.warn("  No coverage data found for enrichment!");
+                log.warn("========================================================");
+                log.warn("");
+                log.warn("Coverage data file does not exist: " + dataFile);
+                log.warn("Run tests with coveragex:prepare-agent before coveragex:enrich.");
+                log.warn("");
+                log.warn("========================================================");
+            } else {
+                log.debug("CoverageX enrichment skipped: no test sources in "
+                        + project.getArtifactId() + " and no coverage data at " + dataFile);
+            }
             return;
         }
 
@@ -97,5 +104,32 @@ public class EnrichCoverageMojo extends AbstractMojo {
         } catch (Exception e) {
             throw new MojoExecutionException("CoverageX enrichment failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * True when at least one of the project's declared test-compile source roots
+     * contains at least one {@code .java} file.
+     */
+    private boolean hasTestSources() {
+        List<String> testSourceRoots = project.getTestCompileSourceRoots();
+        if (testSourceRoots == null) {
+            return false;
+        }
+
+        for (String root : testSourceRoots) {
+            Path rootPath = Paths.get(root);
+            if (!Files.isDirectory(rootPath)) {
+                continue;
+            }
+
+            try (Stream<Path> stream = Files.walk(rootPath)) {
+                if (stream.anyMatch(p -> p.toString().endsWith(".java") && Files.isRegularFile(p))) {
+                    return true;
+                }
+            } catch (IOException ignored) {
+                // Treat unreadable trees as "no evidence of tests" — no false-positive warnings.
+            }
+        }
+        return false;
     }
 }
