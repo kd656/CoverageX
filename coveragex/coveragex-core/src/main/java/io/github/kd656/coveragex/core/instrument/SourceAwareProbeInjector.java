@@ -297,6 +297,49 @@ public class SourceAwareProbeInjector implements ProbeInjector<SourceAwareInput>
         }
 
         /**
+         * Intercepts the category-2 comparison instructions ({@code LCMP},
+         * {@code DCMPL} / {@code DCMPG}, {@code FCMPL} / {@code FCMPG}) so that
+         * both operands can be boxed before the CMP collapses them into a
+         * single {@code -1/0/+1} int.
+         *
+         * <p>For {@code long}, {@code double}, and {@code float} comparisons,
+         * javac emits {@code CMP} followed by a single-operand {@code IF*}. By
+         * the time {@link #visitJumpInsn} runs, only the CMP result is on the
+         * stack — the original operands are gone. This override captures at the
+         * CMP site (both operands still present), stashes them in local slots,
+         * and populates {@link #pendingOperandLocals} so the downstream jump
+         * handler emits the branch probe with the real values instead of a
+         * mislabelled CMP result. If the source model is absent or the pending
+         * operand is not a var-vs-var {@code BINARY_COMPARE}, the visit passes
+         * through unchanged.</p>
+         *
+         * @param opcode the instruction opcode (zero-operand insn)
+         */
+        @Override
+        public void visitInsn(int opcode) {
+            if (pendingOperandLocals == null
+                    && isCategory2CompareOpcode(opcode)) {
+                OperandModel pending = branchResolver.peekNextOperand(currentLine);
+                if (pending != null
+                        && pending.kind() == OperandKind.BINARY_COMPARE
+                        && pending.binaryCaptureMask() == 0b11) {
+                    int[] captured = captureCategory2ComparisonOperands(
+                            opcode, pending.binaryCaptureMask());
+                    if (captured.length > 0) {
+                        pendingOperandLocals = captured;
+                    }
+                }
+            }
+            super.visitInsn(opcode);
+        }
+
+        private static boolean isCategory2CompareOpcode(int opcode) {
+            return opcode == Opcodes.LCMP
+                    || opcode == Opcodes.DCMPL || opcode == Opcodes.DCMPG
+                    || opcode == Opcodes.FCMPL || opcode == Opcodes.FCMPG;
+        }
+
+        /**
          * Intercepts conditional-jump instructions to capture stack operands for
          * {@link OperandKind#BINARY_COMPARE} operands before the original jump
          * instruction has a chance to consume them.

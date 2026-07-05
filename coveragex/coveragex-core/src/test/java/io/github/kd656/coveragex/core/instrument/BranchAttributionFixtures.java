@@ -1,7 +1,7 @@
 package io.github.kd656.coveragex.core.instrument;
 
 /**
- * Static utility methods used as instrumentation targets for Phase C capture tests.
+ * Static utility methods used as instrumentation targets for capture tests.
  *
  * <p>Each method contains exactly one conditional expression so that the emitted
  * probe count and probe layout are predictable. Tests instrument this class with
@@ -76,6 +76,53 @@ public final class BranchAttributionFixtures {
      */
     public static boolean equalsCheck(String a, String b) {
         return a.equals(b);
+    }
+
+    /**
+     * BINARY_COMPARE with two {@code double} variables: {@code score >= threshold}.
+     *
+     * <p>Compiles to {@code DLOAD; DLOAD; DCMPL; IFLT}. At the {@code IFLT}
+     * site the original operands are gone — only the {@code -1/0/+1} CMP
+     * result is on the stack. Both sides are non-literal, so the analyser
+     * emits two labels and {@code binaryCaptureMask = 3}; the injector's
+     * {@code default} branch must recognise the mismatch and skip capture
+     * rather than record the CMP result mislabelled as {@code score}.</p>
+     *
+     * @param score     the score to compare
+     * @param threshold the threshold to compare against
+     * @return {@code true} when {@code score >= threshold}
+     */
+    public static boolean doubleCompareVars(double score, double threshold) {
+        return score >= threshold;
+    }
+
+    /**
+     * BINARY_COMPARE with two {@code long} variables: {@code a > b}.
+     *
+     * <p>Compiles to {@code LLOAD; LLOAD; LCMP; IFLE}. Same category-2
+     * hazard as {@link #doubleCompareVars}: the {@code IFLE} sees only the
+     * CMP result, so the injector must skip capture.</p>
+     *
+     * @param a the left-hand operand
+     * @param b the right-hand operand
+     * @return {@code true} when {@code a > b}
+     */
+    public static boolean longCompareVars(long a, long b) {
+        return a > b;
+    }
+
+    /**
+     * BINARY_COMPARE with two {@code float} variables: {@code x < y}.
+     *
+     * <p>Compiles to {@code FLOAD; FLOAD; FCMPG; IFGE}. Same category-2
+     * hazard: capture must be skipped at the {@code IFGE} site.</p>
+     *
+     * @param x the left-hand operand
+     * @param y the right-hand operand
+     * @return {@code true} when {@code x < y}
+     */
+    public static boolean floatCompareVars(float x, float y) {
+        return x < y;
     }
 
     /**

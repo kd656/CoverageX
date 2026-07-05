@@ -7,7 +7,7 @@ import java.util.List;
  * Demonstration fixtures for the CoverageX branch-test-attribution feature.
  *
  * <p>Each method below exercises exactly one branch-condition kind that the
- * Phase B/C {@code OperandArgVisitor} handles. When the generated coverage
+ * {@code OperandArgVisitor} handles. When the generated coverage
  * report is opened in a browser, the popover for each branch should display
  * the operand columns and captured values described in each method's Javadoc.</p>
  *

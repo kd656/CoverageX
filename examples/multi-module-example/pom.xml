@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      Example multi-module reactor for coveragex-maven-plugin:aggregate-report.
+
+      Layout:
+        parent/  (pom, this file)
+        ├── dto/       — production classes (UserRecord); no tests
+        └── service/   — production + tests that exercise UserRecord
+
+      How aggregation is scheduled:
+        aggregate-report is declared here in the reactor parent's
+        <build><plugins> and is inherited by every child. It fires on each
+        module's verify phase but self-skips unless the current project is
+        the LAST in MavenSession.getProjects(). By that point every earlier
+        module's coveragex.exec is on disk, so the last fire produces a
+        complete aggregate report. No dedicated report submodule required.
+
+      Expected outcome after `mvn verify` from this directory:
+        target/coveragex-report/index.html                                        (at the reactor root)
+        target/coveragex-report/classes/dto/example-dto-UserRecord.data.js         (routed via ownership)
+        target/coveragex-report/classes/service/example-service-UserService.data.js
+    -->
+    <groupId>example.coveragex.multimodule</groupId>
+    <artifactId>multi-module-example</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>dto</module>
+        <module>service</module>
+    </modules>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <coveragex.version>0.1.0-SNAPSHOT</coveragex.version>
+    </properties>
+
+    <build>
+        <!--
+          Per-module executions (prepare-agent, analyze, enrich) sit in
+          pluginManagement — children opt in by declaring the plugin in their
+          own <build><plugins> block without repeating version/executions.
+        -->
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>io.github.kd656</groupId>
+                    <artifactId>coveragex-maven-plugin</artifactId>
+                    <version>${coveragex.version}</version>
+                    <configuration>
+                        <!--
+                          Constrain instrumentation to the example's own packages.
+                          The default excludes already drop java/javax/jdk/junit; being
+                          explicit about includes here narrows the blast radius further
+                          and matches the pattern most real projects use.
+                        -->
+                        <includes>
+                            <include>example.**</include>
+                        </includes>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>coveragex-prepare</id>
+                            <goals><goal>prepare-agent</goal></goals>
+                        </execution>
+                        <execution>
+                            <id>coveragex-analyze</id>
+                            <goals><goal>analyze</goal></goals>
+                        </execution>
+                        <execution>
+                            <id>coveragex-enrich</id>
+                            <goals><goal>enrich</goal></goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
+        <!--
+          aggregate-report is declared here (not in pluginManagement) so every
+          child inherits the execution automatically. The mojo internally
+          short-circuits on every fire except the last reactor project, so
+          effectively it runs once — after the last module's verify — with
+          every module's coveragex.exec already on disk.
+        -->
+        <plugins>
+            <plugin>
+                <groupId>io.github.kd656</groupId>
+                <artifactId>coveragex-maven-plugin</artifactId>
+                <version>${coveragex.version}</version>
+                <executions>
+                    <execution>
+                        <id>coveragex-aggregate</id>
+                        <phase>verify</phase>
+                        <goals><goal>aggregate-report</goal></goals>
+                        <configuration>
+                            <thresholdMode>PER_MODULE</thresholdMode>
+                            <reportFormats>html</reportFormats>
+                            <enableInvocationTracking>true</enableInvocationTracking>
+                            <enableInsights>true</enableInsights>
+                            <enableSuggestions>true</enableSuggestions>
+                            <enableOverCoverageAnalysis>true</enableOverCoverageAnalysis>
+                            <minimumCoverage>0</minimumCoverage>
+                            <failOnLowCoverage>false</failOnLowCoverage>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -2,206 +2,139 @@ package io.github.kd656.coveragex.core.report.views.assembler;
 
 import io.github.kd656.coveragex.core.insights.Insight;
 import io.github.kd656.coveragex.core.insights.Severity;
-import io.github.kd656.coveragex.core.report.model.*;
+import io.github.kd656.coveragex.core.report.ReportScope;
+import io.github.kd656.coveragex.core.report.model.ClassMetrics;
+import io.github.kd656.coveragex.core.report.model.ReportModel;
+import io.github.kd656.coveragex.core.report.model.SummaryMetrics;
 import io.github.kd656.coveragex.core.report.pipeline.results.InsightsResult;
-import io.github.kd656.coveragex.core.report.views.html.*;
+import io.github.kd656.coveragex.core.report.views.html.HtmlModuleNode;
+import io.github.kd656.coveragex.core.report.views.html.HtmlNavNode;
+import io.github.kd656.coveragex.core.report.views.html.HtmlReportViewModel;
+import io.github.kd656.coveragex.core.report.views.html.HtmlSummary;
 
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
+/**
+ * Turns a computed {@link ReportModel} into the {@link HtmlReportViewModel} the
+ * Freemarker templates render.
+ *
+ * <p>Delegates the package-tree walk to {@link HtmlNavTreeBuilder}. Single-module
+ * models produce a flat tree; scoped models produce one {@link HtmlModuleNode}
+ * per scope, each carrying its own package tree.</p>
+ */
 public class HtmlViewModelAssembler {
 
-    public HtmlReportViewModel assemble(ReportModel model, java.nio.file.Path sourceDirectory) {
+    private final HtmlNavTreeBuilder navTreeBuilder = new HtmlNavTreeBuilder();
+
+    public HtmlReportViewModel assemble(ReportModel model, Path sourceDirectory) {
         SummaryMetrics summary = model.getSummaryMetrics();
-        List<ClassMetrics> classes = model.getClassMetrics();
 
         List<Insight> allInsights = model.get(InsightsResult.class)
-            .map(InsightsResult::insights)
-            .orElse(Collections.emptyList());
-
-        Map<String, List<Insight>> insightsByClass = allInsights.stream()
-            .collect(Collectors.groupingBy(Insight::classId));
-        Map<Severity, Long> countBySeverity = allInsights.stream()
-            .collect(Collectors.groupingBy(Insight::severity, Collectors.counting()));
+                .map(InsightsResult::insights)
+                .orElse(Collections.emptyList());
+        Map<String, List<Insight>> insightsByClass = groupByClassId(allInsights);
+        Map<Severity, Long> countBySeverity = countBySeverity(allInsights);
 
         HtmlSummary topBar = buildTopBar(summary, countBySeverity);
-        List<HtmlNavNode> navTree = buildNavTree(classes, insightsByClass);
 
+        if (model.isScoped()) {
+            List<HtmlModuleNode> modules = new ArrayList<>(model.getScopes().size());
+            for (ReportScope scope : model.getScopes()) {
+                modules.add(buildModuleNode(scope, insightsByClass));
+            }
+            return new HtmlReportViewModel(topBar, List.of(), modules);
+        }
+
+        // Single-module: flat tree at classes/<sectionId>.data.js (unchanged layout).
+        List<HtmlNavNode> navTree = navTreeBuilder.build(
+                model.getClassMetrics(),
+                insightsByClass,
+                "",
+                sectionId -> "classes/" + sectionId + ".data.js");
         return new HtmlReportViewModel(topBar, navTree);
+    }
+
+    private HtmlModuleNode buildModuleNode(ReportScope scope,
+                                            Map<String, List<Insight>> insightsByClass) {
+        String scopeId = scope.scopeId();
+        List<HtmlNavNode> tree = navTreeBuilder.build(
+                scope.classMetrics(),
+                insightsByClass,
+                scopeId + "--",
+                sectionId -> "classes/" + scopeId + "/" + sectionId + ".data.js");
+        double coveragePct = averageCoverage(scope.classMetrics());
+        boolean hasCrit = anyInsightIn(scope.classMetrics(), insightsByClass, Severity.CRITICAL);
+        boolean hasWarn = anyInsightIn(scope.classMetrics(), insightsByClass, Severity.WARNING);
+        return new HtmlModuleNode(
+                scopeId,
+                scope.displayName() != null ? scope.displayName() : scopeId,
+                coveragePct,
+                scope.classMetrics().size(),
+                hasCrit,
+                hasWarn,
+                tree,
+                true);
     }
 
     private HtmlSummary buildTopBar(SummaryMetrics summary, Map<Severity, Long> bySeverity) {
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
         int notCovered = summary.totalProbes() - summary.executedProbes();
         return new HtmlSummary(
-            timestamp, summary.lineCoveragePercent(),
-            summary.classCount(), summary.totalProbes(), summary.executedProbes(), notCovered,
-            bySeverity.getOrDefault(Severity.CRITICAL, 0L),
-            bySeverity.getOrDefault(Severity.WARNING,  0L),
-            bySeverity.getOrDefault(Severity.INFO,     0L),
-            bySeverity.getOrDefault(Severity.POSITIVE, 0L)
-        );
+                timestamp, summary.lineCoveragePercent(),
+                summary.classCount(), summary.totalProbes(), summary.executedProbes(), notCovered,
+                bySeverity.getOrDefault(Severity.CRITICAL, 0L),
+                bySeverity.getOrDefault(Severity.WARNING, 0L),
+                bySeverity.getOrDefault(Severity.INFO, 0L),
+                bySeverity.getOrDefault(Severity.POSITIVE, 0L));
     }
 
-    /**
-     * Builds the IDE-style package tree from the flat list of class metrics.
-     *
-     * Algorithm:
-     * 1. Build a mutable TreeNode tree by splitting each classId on '/'.
-     * 2. Convert TreeNode tree depth-first to HtmlNavNode instances.
-     * 3. Sort: folders first, then files, each group alphabetically.
-     * 4. expandedByDefault = path contains first class, OR total class count <= 15.
-     */
-    List<HtmlNavNode> buildNavTree(List<ClassMetrics> classes,
-                                   Map<String, List<Insight>> insightsByClass) {
-        if (classes.isEmpty()) return Collections.emptyList();
+    private static Map<String, List<Insight>> groupByClassId(List<Insight> insights) {
+        Map<String, List<Insight>> byClass = new LinkedHashMap<>();
+        for (Insight insight : insights) {
+            byClass.computeIfAbsent(insight.classId(), k -> new ArrayList<>()).add(insight);
+        }
+        return byClass;
+    }
 
-        boolean smallProject = classes.size() <= 15;
-        String firstClassId = classes.getFirst().classId();
+    private static Map<Severity, Long> countBySeverity(List<Insight> insights) {
+        Map<Severity, Long> counts = new EnumMap<>(Severity.class);
+        for (Insight insight : insights) {
+            counts.merge(insight.severity(), 1L, Long::sum);
+        }
+        return counts;
+    }
 
-        // Step 1: Build mutable intermediate tree
-        TreeNode root = new TreeNode("", null);
+    private static double averageCoverage(List<ClassMetrics> classes) {
+        if (classes.isEmpty()) return 0.0;
+        double sum = 0.0;
         for (ClassMetrics cm : classes) {
-            String[] segments = cm.classId().split("/");
-            TreeNode current = root;
-            // Navigate / create folder nodes for all segments except the last
-            for (int i = 0; i < segments.length - 1; i++) {
-                String seg = segments[i];
-                final TreeNode parent = current;
-                current = current.children.computeIfAbsent(seg, s -> new TreeNode(s, parent));
-            }
-            // Last segment is the class leaf
-            String leafSeg = segments[segments.length - 1];
-            current.children.put(leafSeg, new TreeNode(leafSeg, current, cm));
+            sum += cm.lineCoveragePercent();
         }
-
-        // Step 2: Convert to HtmlNavNode list
-        return convertChildren(root, insightsByClass, firstClassId, smallProject, "");
+        return sum / classes.size();
     }
 
-    private List<HtmlNavNode> convertChildren(TreeNode node,
-                                              Map<String, List<Insight>> insightsByClass,
-                                              String firstClassId,
-                                              boolean smallProject,
-                                              String parentPath) {
-        List<HtmlNavNode> folders = new ArrayList<>();
-        List<HtmlNavNode> files   = new ArrayList<>();
-
-        for (Map.Entry<String, TreeNode> entry : node.children.entrySet()) {
-            String segment = entry.getKey();
-            TreeNode child = entry.getValue();
-            String childPath = parentPath.isEmpty() ? segment : parentPath + "/" + segment;
-
-            if (child.leaf != null) {
-                // This is a class file node
-                ClassMetrics cm = child.leaf;
-                List<Insight> ci = insightsByClass.getOrDefault(cm.classId(), Collections.emptyList());
-                boolean hasCrit = ci.stream().anyMatch(i -> i.severity() == Severity.CRITICAL);
-                boolean hasWarn = ci.stream().anyMatch(i -> i.severity() == Severity.WARNING);
-                boolean hasPos  = ci.stream().anyMatch(i -> i.severity() == Severity.POSITIVE);
-                files.add(new HtmlNavNode.File(
-                    sectionId(cm.classId()),
-                    cm.simpleName(),
-                    cm.lineCoveragePercent(),
-                    hasCrit, hasWarn, hasPos
-                ));
-            } else {
-                // This is a folder (package segment)
-                List<HtmlNavNode> grandchildren = convertChildren(
-                    child, insightsByClass, firstClassId, smallProject, childPath);
-
-                // Compute aggregate coverage across all descendants
-                double avgCoverage = computeAverageCoverage(child);
-
-                // Bubble up severity flags
-                boolean folderHasCrit = anyDescendantHas(child, insightsByClass, Severity.CRITICAL);
-                boolean folderHasWarn = anyDescendantHas(child, insightsByClass, Severity.WARNING);
-
-                // expandedByDefault: path includes first class OR small project
-                boolean expanded = smallProject || isOnPathToClass(child, firstClassId);
-
-                folders.add(new HtmlNavNode.Folder(
-                    segment,
-                    childPath,
-                    avgCoverage,
-                    folderHasCrit,
-                    folderHasWarn,
-                    grandchildren,
-                    expanded
-                ));
+    private static boolean anyInsightIn(List<ClassMetrics> classes,
+                                         Map<String, List<Insight>> insightsByClass,
+                                         Severity severity) {
+        for (ClassMetrics cm : classes) {
+            List<Insight> forClass = insightsByClass.getOrDefault(cm.classId(), Collections.emptyList());
+            for (Insight insight : forClass) {
+                if (insight.severity() == severity) return true;
             }
         }
-
-        // Sort each group alphabetically
-        folders.sort(Comparator.comparing(n -> ((HtmlNavNode.Folder) n).label()));
-        files.sort(Comparator.comparing(n -> ((HtmlNavNode.File) n).simpleName()));
-
-        List<HtmlNavNode> result = new ArrayList<>(folders.size() + files.size());
-        result.addAll(folders);
-        result.addAll(files);
-        return result;
+        return false;
     }
 
-    private double computeAverageCoverage(TreeNode node) {
-        List<ClassMetrics> leaves = collectLeaves(node);
-        if (leaves.isEmpty()) return 0.0;
-        return leaves.stream()
-            .mapToDouble(ClassMetrics::lineCoveragePercent)
-            .average()
-            .orElse(0.0);
-    }
-
-    private List<ClassMetrics> collectLeaves(TreeNode node) {
-        List<ClassMetrics> result = new ArrayList<>();
-        if (node.leaf != null) {
-            result.add(node.leaf);
-        } else {
-            for (TreeNode child : node.children.values()) {
-                result.addAll(collectLeaves(child));
-            }
-        }
-        return result;
-    }
-
-    private boolean anyDescendantHas(TreeNode node, Map<String, List<Insight>> insightsByClass,
-                                     Severity severity) {
-        if (node.leaf != null) {
-            return insightsByClass.getOrDefault(node.leaf.classId(), Collections.emptyList())
-                .stream().anyMatch(i -> i.severity() == severity);
-        }
-        return node.children.values().stream()
-            .anyMatch(child -> anyDescendantHas(child, insightsByClass, severity));
-    }
-
-    private boolean isOnPathToClass(TreeNode node, String classId) {
-        if (node.leaf != null) return node.leaf.classId().equals(classId);
-        return node.children.values().stream()
-            .anyMatch(child -> isOnPathToClass(child, classId));
-    }
-
-    public static String sectionId(String classId) { return classId.replace('/', '-'); }
-
-    // -----------------------------------------------------------------------
-    // Mutable intermediate tree node
-    // -----------------------------------------------------------------------
-
-    private static final class TreeNode {
-        final String segment;
-        final TreeNode parent;
-        final ClassMetrics leaf; // non-null only for leaf (file) nodes
-        // Using LinkedHashMap to preserve insertion order for predictable output
-        final Map<String, TreeNode> children = new LinkedHashMap<>();
-
-        TreeNode(String segment, TreeNode parent) {
-            this(segment, parent, null);
-        }
-
-        TreeNode(String segment, TreeNode parent, ClassMetrics leaf) {
-            this.segment = segment;
-            this.parent  = parent;
-            this.leaf    = leaf;
-        }
+    /** Kept for back-compat with call sites that computed a section id externally. */
+    public static String sectionId(String classId) {
+        return HtmlNavTreeBuilder.sectionId(classId);
     }
 }

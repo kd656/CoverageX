@@ -2,6 +2,9 @@ package io.github.kd656.coveragex.maven;
 
 import io.github.kd656.coveragex.core.analysis.source.SourceMapGenerator;
 import io.github.kd656.coveragex.core.analysis.source.SourceMapGeneratorFactory;
+import io.github.kd656.coveragex.core.multi.CombinedSemanticIndexAssembler;
+import io.github.kd656.coveragex.core.multi.CoverageArtifactPaths;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.logging.Log;
@@ -27,8 +30,8 @@ public class AnalyzeMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject project;
 
-    @Parameter(defaultValue = "${project.build.directory}", readonly = true)
-    private Path buildDir;
+    @Parameter(defaultValue = "${session}", readonly = true, required = true)
+    private MavenSession session;
 
     @Parameter(property = "coveragex.includeTests", defaultValue = "false")
     private boolean includeTests;
@@ -37,31 +40,45 @@ public class AnalyzeMojo extends AbstractMojo {
     public void execute() throws MojoExecutionException {
         try {
             Log log = getLog();
+            CoverageArtifactPaths paths = MavenCoverageArtifactPaths.forProject(project);
 
-            // 1) Determine source roots
-            List<Path> roots = new ArrayList<>();
-            for (String root : project.getCompileSourceRoots()) {
-                log.info("Found a root: " + root);
-                roots.add(Paths.get(root));
-            }
+            List<Path> roots = collectSourceRoots(log);
+            SourceMapGenerator generator = SourceMapGeneratorFactory.forSourceRoots(roots);
+            generator.generate(roots, paths.mapFile());
+            log.info("coveragex mapping written to: " + paths.mapFile());
 
-            // 2) Emit mapping into classes output (so it is on classpath)
-            Path out = buildDir.resolve("test-classes")
-                    .resolve("coveragex")
-                    .resolve("coveragex.map.json");
-
-            // 3) Parse source roots and save .map.json file
-            for (Path root : roots) {
-                log.info("Scanning a root: " + root);
-            }
-
-            SourceMapGenerator sourceMapGenerator = SourceMapGeneratorFactory.forSourceRoots(roots);
-            sourceMapGenerator.generate(roots, out);
-
-            log.info("coveragex mapping written to: " + out);
-
+            new CombinedSemanticIndexAssembler().assembleAndWrite(
+                    paths.mapFile(),
+                    upstreamMapFiles(),
+                    paths.combinedMapFile());
         } catch (Exception e) {
             throw new MojoExecutionException("coveragex analyze failed", e);
         }
+    }
+
+    private List<Path> collectSourceRoots(Log log) {
+        List<Path> roots = new ArrayList<>();
+        for (String root : project.getCompileSourceRoots()) {
+            log.info("Found a root: " + root);
+            roots.add(Paths.get(root));
+        }
+        for (Path root : roots) {
+            log.info("Scanning a root: " + root);
+        }
+        return roots;
+    }
+
+    /** Map file locations for every reactor project that builds strictly before this one. */
+    private List<Path> upstreamMapFiles() {
+        List<MavenProject> all = session.getProjects();
+        int selfIndex = all.indexOf(project);
+        if (selfIndex <= 0) {
+            return List.of();
+        }
+        List<Path> paths = new ArrayList<>(selfIndex);
+        for (MavenProject upstream : all.subList(0, selfIndex)) {
+            paths.add(MavenCoverageArtifactPaths.forProject(upstream).mapFile());
+        }
+        return paths;
     }
 }

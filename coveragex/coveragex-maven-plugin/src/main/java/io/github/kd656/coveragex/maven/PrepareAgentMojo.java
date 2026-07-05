@@ -2,6 +2,7 @@ package io.github.kd656.coveragex.maven;
 
 import io.github.kd656.coveragex.api.agent.AgentArgumentBuilder;
 import io.github.kd656.coveragex.api.agent.AgentOptions;
+import io.github.kd656.coveragex.core.multi.CoverageArtifactPaths;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -13,7 +14,6 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 
 import java.io.File;
-import java.nio.file.Paths;
 import java.util.List;
 
 /**
@@ -88,18 +88,13 @@ public class PrepareAgentMojo extends AbstractMojo {
                     "Ensure coveragex-agent is listed as a plugin dependency.");
         }
 
-        // Build agent arguments
-        String destFilePath = Paths.get(project.getBuild().getDirectory(), destFile).toAbsolutePath().toString();
 
-        // The coverage map is written by the 'analyze' goal to the test-classes directory.
-        // Pass it to the agent so source-aware probe injection can be activated.
-        String mapFilePath = Paths.get(project.getBuild().getDirectory(), "test-classes", "coveragex", "coveragex.map.json").toAbsolutePath().toString();
+        CoverageArtifactPaths paths = MavenCoverageArtifactPaths.forProject(project, destFile);
+        String destFilePath = paths.execFile().toAbsolutePath().toString();
+        String mapFilePath = paths.combinedMapFile().toAbsolutePath().toString();
 
         String agentArgs = new AgentArgumentBuilder().build(
                 new AgentOptions(destFilePath, mapFilePath, includes, excludes));
-
-        // Build complete agent argument string. Quote it as one JVM argument so paths
-        // containing spaces do not get split by Surefire's argLine parser.
         String agentArgument = quoteForSurefireArgLine(String.format("-javaagent:%s=%s", agentJarPath, agentArgs));
 
         // Append to existing argLine (for JaCoCo compatibility)
