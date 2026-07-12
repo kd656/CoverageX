@@ -3,6 +3,7 @@ package io.github.kd656.coveragex.core.report;
 import io.github.kd656.coveragex.api.data.ExecutionData;
 
 import java.nio.file.Path;
+import java.util.Map;
 
 /**
  * Reusable input boundary between the build-tool plugin and the reporting stack.
@@ -15,5 +16,10 @@ public record ReportInput(
         String scopeId,
         String displayName,
         Path sourceDirectory,
-        ExecutionData executionData
-) {}
+        ExecutionData executionData,
+        Map<String, String> sourceFilesByClassId
+) {
+    public ReportInput {
+        sourceFilesByClassId = sourceFilesByClassId != null ? Map.copyOf(sourceFilesByClassId) : Map.of();
+    }
+}

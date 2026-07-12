@@ -91,6 +91,6 @@ class ThresholdEvaluatorTest {
 
     private static ReportInput input(String scopeId, String classId, boolean[] probeHits) {
         ClassCoverage cc = new ClassCoverage(classId, probeHits, Map.of(), Map.of(), List.of(), null);
-        return new ReportInput(scopeId, scopeId, null, new ExecutionData(Map.of(classId, cc)));
+        return new ReportInput(scopeId, scopeId, null, new ExecutionData(Map.of(classId, cc)), Map.of());
     }
 }

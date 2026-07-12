@@ -40,7 +40,7 @@ public final class DefaultReportModelFactory implements ReportModelFactory {
 
     @Override
     public ReportModel build(ExecutionData data) {
-        List<ClassMetrics> classMetricsList = buildClassMetricsList(data);
+        List<ClassMetrics> classMetricsList = buildClassMetricsList(data, Map.of());
         SummaryMetrics summary = new SummaryMetrics(
                 data.totalProbes(),
                 data.executedProbes(),
@@ -61,7 +61,7 @@ public final class DefaultReportModelFactory implements ReportModelFactory {
         int classCount = 0;
         for (ReportInput input : inputs) {
             ExecutionData data = input.executionData();
-            List<ClassMetrics> perScope = buildClassMetricsList(data);
+            List<ClassMetrics> perScope = buildClassMetricsList(data, input.sourceFilesByClassId());
             SummaryMetrics perScopeSummary = new SummaryMetrics(
                     data.totalProbes(),
                     data.executedProbes(),
@@ -90,29 +90,18 @@ public final class DefaultReportModelFactory implements ReportModelFactory {
     // Bootstrap pass: ExecutionData -> List<ClassMetrics>
     // -------------------------------------------------------------------------
 
-    private List<ClassMetrics> buildClassMetricsList(ExecutionData data) {
+    private List<ClassMetrics> buildClassMetricsList(ExecutionData data, Map<String, String> sourceFilesByClassId) {
         return data.classes().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
-                .map(e -> buildClassMetrics(e.getKey(), e.getValue()))
+                .map(e -> buildClassMetrics(e.getKey(), e.getValue(), sourceFilesByClassId.get(e.getKey())))
                 .toList();
     }
 
     private double getGlobalPct(List<ClassMetrics> classMetricsList) {
-        long totalLines = 0, coveredLines = 0;
-        for (ClassMetrics cm : classMetricsList) {
-            for (LineStatus ls : cm.lines()) {
-                if (ls.coverage() != Coverage.NOT_EXECUTABLE) {
-                    totalLines++;
-                    if (ls.coverage() == Coverage.HIT) {
-                        coveredLines++;
-                    }
-                }
-            }
-        }
-        return totalLines > 0 ? (100.0 * coveredLines / totalLines) : 0.0;
+        return ClassMetrics.aggregateProbeCoverage(classMetricsList);
     }
 
-    private ClassMetrics buildClassMetrics(String classId, ClassCoverage cc) {
+    private ClassMetrics buildClassMetrics(String classId, ClassCoverage cc, String sourceFile) {
         boolean[] probeHits = cc.probeHits();
         List<ProbeMetadata> metadata = cc.probeMetadata();
         Map<Integer, MethodHit> entryProbes = cc.methodHits();
@@ -174,7 +163,7 @@ public final class DefaultReportModelFactory implements ReportModelFactory {
         long   totalMethods = methodProbeByKey.size();
         double methodPct = totalMethods  > 0 ? (100.0 * coveredMethods  / totalMethods)  : 0.0;
 
-        return new ClassMetrics(classId, simpleClassName(classId), packageName(classId),
+        return new ClassMetrics(classId, sourceFile, simpleClassName(classId), packageName(classId),
                 linePct, branchPct, methodPct,
                 methodMetricsList, branchResults, lineStatuses, metadata, cc.testAttribution());
     }
@@ -259,7 +248,8 @@ public final class DefaultReportModelFactory implements ReportModelFactory {
 
     private String simpleClassName(String classId) {
         int slash = classId.lastIndexOf('/');
-        return slash >= 0 ? classId.substring(slash + 1) : classId;
+        String simple = slash >= 0 ? classId.substring(slash + 1) : classId;
+        return simple.replace('$', '.');
     }
 
     private String packageName(String classId) {
@@ -303,6 +293,7 @@ public final class DefaultReportModelFactory implements ReportModelFactory {
 
         return methodProbe != null
                 && methodProbe.startLine() == methodProbe.endLine()
-                && nonMethodProbeCount == 1;
+                && nonMethodProbeCount == 1
+                && methodProbe.parameterNames().isEmpty();
     }
 }

@@ -125,7 +125,8 @@ public final class ModuleClassOwnershipIndex {
                     input.scopeId(),
                     input.displayName(),
                     input.sourceDirectory(),
-                    new ExecutionData(bucket)
+                    new ExecutionData(bucket),
+                    input.sourceFilesByClassId()
             ));
         }
         return routed;

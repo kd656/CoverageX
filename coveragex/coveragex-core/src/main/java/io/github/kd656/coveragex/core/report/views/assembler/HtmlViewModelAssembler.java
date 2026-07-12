@@ -113,12 +113,7 @@ public class HtmlViewModelAssembler {
     }
 
     private static double averageCoverage(List<ClassMetrics> classes) {
-        if (classes.isEmpty()) return 0.0;
-        double sum = 0.0;
-        for (ClassMetrics cm : classes) {
-            sum += cm.lineCoveragePercent();
-        }
-        return sum / classes.size();
+        return ClassMetrics.aggregateProbeCoverage(classes);
     }
 
     private static boolean anyInsightIn(List<ClassMetrics> classes,

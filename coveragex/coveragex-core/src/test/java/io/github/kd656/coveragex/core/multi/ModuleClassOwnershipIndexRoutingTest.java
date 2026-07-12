@@ -91,7 +91,7 @@ class ModuleClassOwnershipIndexRoutingTest {
 
     private static ReportInput input(String scopeId, Map<String, ClassCoverage> classes) {
         Map<String, ClassCoverage> preserved = new LinkedHashMap<>(classes);
-        return new ReportInput(scopeId, scopeId, null, new ExecutionData(preserved));
+        return new ReportInput(scopeId, scopeId, null, new ExecutionData(preserved), Map.of());
     }
 
     private static ClassCoverage coverage(String classId, boolean[] probeHits) {

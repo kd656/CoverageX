@@ -75,6 +75,7 @@ public final class BaseFixtureCatalog {
             new TextBlockSpec(),
             new RecordSimpleSpec(),
             new RecordCompactCtorSpec(),
+            new RecordWithMethodSpec(),
             new SealedTypesSpec(),
             new PatternInstanceofSpec(),
             new PatternSwitchSpec(),

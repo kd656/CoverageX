@@ -107,6 +107,16 @@
       transition: background .1s; user-select: none;
     }
     .nav-folder-row:hover { background: var(--bg-hover); color: var(--text); }
+    .nav-class-row { text-transform: none; letter-spacing: 0; }
+    /* Nested classes: mark direct children of a class-group with a ↳ prefix
+       so the reader can see the class-nesting relationship without relying
+       on indentation alone. */
+    .nav-class-group > .nav-folder-children > .nav-item > .nav-name::before,
+    .nav-class-group > .nav-folder-children > .nav-folder > .nav-folder-row > .nav-name::before {
+      content: "↳ ";
+      color: var(--text-muted);
+      margin-right: 2px;
+    }
     .nav-arrow { font-size: 8px; transition: transform .15s; min-width: 10px; }
     .nav-folder.open > .nav-folder-row .nav-arrow { transform: rotate(90deg); }
     .nav-folder-children { display: none; }
