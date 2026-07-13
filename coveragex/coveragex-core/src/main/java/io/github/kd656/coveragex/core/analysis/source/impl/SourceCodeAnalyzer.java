@@ -9,11 +9,15 @@ import com.github.javaparser.ParseResult;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.CompactConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.RecordDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.*;
+import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
+import com.github.javaparser.ast.nodeTypes.modifiers.NodeWithAccessModifiers;
 import com.github.javaparser.ast.stmt.*;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 
@@ -160,15 +164,50 @@ public final class SourceCodeAnalyzer implements SourceAnalyzer {
         }
 
         @Override
+        public void visit(RecordDeclaration n, Void arg) {
+            String className = toInternalClassName(n);
+            index.getOrCreateClass(className, sourceFile);
+            super.visit(n, arg);
+            // Register the implicit canonical constructor if the record author
+            // didn't spell one out. Without this, the ctor has no parameterNames
+            // in the source map, and downstream filters treat it as a Java-style
+            // implicit default constructor — hiding the "entry ×N" pill.
+            boolean hasExplicitCtor = n.getMembers().stream().anyMatch(m ->
+                    m instanceof ConstructorDeclaration
+                            || m instanceof CompactConstructorDeclaration);
+            if (!hasExplicitCtor) {
+                String descriptor = descriptorResolver.resolveCanonicalConstructorDescriptor(compilationUnit, n);
+                ClassModel classModel = index.getOrCreateClass(className, sourceFile);
+                classModel.getOrCreate(new MethodReference("<init>", descriptor),
+                        () -> buildConstructor(className, n, descriptor, n.getParameters()));
+            }
+        }
+
+        @Override
         public void visit(ConstructorDeclaration n, Void arg) {
             super.visit(n, arg);
-            String className = findClassName(n);
-            if (className != null) {
-                ClassModel classModel = index.getOrCreateClass(className, sourceFile);
-                String descriptor = descriptorResolver.resolveConstructorDescriptor(compilationUnit, n);
-                classModel.getOrCreate(new MethodReference("<init>", descriptor),
-                        () -> buildFromConstructor(className, n));
-            }
+            registerConstructor(n,
+                    descriptorResolver.resolveConstructorDescriptor(compilationUnit, n),
+                    n.getParameters());
+        }
+
+        @Override
+        public void visit(CompactConstructorDeclaration n, Void arg) {
+            super.visit(n, arg);
+            RecordDeclaration record = n.findAncestor(RecordDeclaration.class)
+                    .orElseThrow(() -> new IllegalStateException("Compact constructor outside record"));
+            registerConstructor(n,
+                    descriptorResolver.resolveCompactConstructorDescriptor(compilationUnit, n),
+                    record.getParameters());
+        }
+
+        private <T extends Node & NodeWithAccessModifiers<?> & NodeWithSimpleName<?>>
+        void registerConstructor(T decl, String descriptor, NodeList<Parameter> params) {
+            String className = findClassName(decl);
+            if (className == null) return;
+            ClassModel classModel = index.getOrCreateClass(className, sourceFile);
+            classModel.getOrCreate(new MethodReference("<init>", descriptor),
+                    () -> buildConstructor(className, decl, descriptor, params));
         }
 
         private void recordDecision(String kind, Expression condition, Node decisionNode) {
@@ -418,19 +457,37 @@ public final class SourceCodeAnalyzer implements SourceAnalyzer {
             return expr;
         }
 
+        @SuppressWarnings({"rawtypes", "unchecked"})
         private String findClassName(Node n) {
             // SemanticIndex keys are JVM internal names (e.g. "com/example/Foo").
-            // JavaParser's getFullyQualifiedName() returns dotted form, so convert
-            // once here at the write boundary; every downstream reader expects
-            // internal form and previously had to compensate with .replace('.', '/').
-            return n.findAncestor(ClassOrInterfaceDeclaration.class)
-                    .map(ClassOrInterfaceDeclaration::getFullyQualifiedName)
-                    .flatMap(x -> x)
-                    .map(fqcn -> fqcn.replace('.', '/'))
+            // JavaParser renders nested type FQCNs with dots, while bytecode uses
+            // '$' between nested classes. Walk the AST ancestry so records and
+            // nested records line up with ClassReader#getClassName().
+            return n.findAncestor(TypeDeclaration.class)
+                    .map(this::toInternalClassName)
                     .orElse(null);
         }
 
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        private String toInternalClassName(TypeDeclaration<?> type) {
+            Deque<String> nestedNames = new ArrayDeque<>();
+            for (TypeDeclaration<?> t = type;
+                 t != null;
+                 t = t.findAncestor(TypeDeclaration.class).orElse(null)) {
+                nestedNames.addFirst(t.getNameAsString());
+            }
+
+            String nestedName = String.join("$", nestedNames);
+            String packagePrefix = compilationUnit.getPackageDeclaration()
+                    .map(pkg -> pkg.getNameAsString().replace('.', '/'))
+                    .orElse("");
+            return packagePrefix.isEmpty() ? nestedName : packagePrefix + "/" + nestedName;
+        }
+
         private MethodModel constructMethodModel(String className, Node node) {
+            if (className == null) {
+                return null;
+            }
 
             ClassModel classModel = index.getOrCreateClass(className, sourceFile);
 
@@ -445,13 +502,20 @@ public final class SourceCodeAnalyzer implements SourceAnalyzer {
                                 return classModel.getOrCreate(methodRef, () -> buildFromMethod(className, methodDecl));
                             })
                             .or(() -> node.findAncestor(ConstructorDeclaration.class)
-                                    .map(constructorDecl -> {
-                                        String methodName = "<init>";
-                                        String descriptor = descriptorResolver.resolveConstructorDescriptor(compilationUnit, constructorDecl);
-
-                                        MethodReference methodRef = new MethodReference(methodName, descriptor);
-
-                                        return classModel.getOrCreate(methodRef, () -> buildFromConstructor(className, constructorDecl));
+                                    .map(ctor -> {
+                                        String descriptor = descriptorResolver.resolveConstructorDescriptor(compilationUnit, ctor);
+                                        return classModel.getOrCreate(new MethodReference("<init>", descriptor),
+                                                () -> buildConstructor(className, ctor, descriptor, ctor.getParameters()));
+                                    })
+                            )
+                            .or(() -> node.findAncestor(CompactConstructorDeclaration.class)
+                                    .map(ctor -> {
+                                        String descriptor = descriptorResolver.resolveCompactConstructorDescriptor(compilationUnit, ctor);
+                                        NodeList<Parameter> params = ctor.findAncestor(RecordDeclaration.class)
+                                                .orElseThrow(() -> new IllegalStateException("Compact constructor outside record"))
+                                                .getParameters();
+                                        return classModel.getOrCreate(new MethodReference("<init>", descriptor),
+                                                () -> buildConstructor(className, ctor, descriptor, params));
                                     })
                             )
                             .orElse(null);
@@ -495,32 +559,24 @@ public final class SourceCodeAnalyzer implements SourceAnalyzer {
             );
         }
 
-        private MethodModel buildFromConstructor(String className, ConstructorDeclaration constructorDecl) {
-            String descriptor = descriptorResolver.resolveConstructorDescriptor(compilationUnit, constructorDecl);
-
-            int parameterCount = constructorDecl.getParameters().size();
-            List<String> parameterTypes = extractParameterTypes(constructorDecl.getParameters());
-            List<String> parameterNames = extractParameterNames(constructorDecl.getParameters());
-
-            boolean isPublic = constructorDecl.isPublic();
-            boolean isPrivate = constructorDecl.isPrivate();
-            boolean isProtected = constructorDecl.isProtected();
-
-            int startLine = constructorDecl.getName().getBegin().map(p -> p.line)
-                    .orElseGet(() -> constructorDecl.getBegin().map(p -> p.line).orElse(-1));
-            int endLine   = constructorDecl.getEnd().map(p -> p.line).orElse(-1);
+        private <T extends Node & NodeWithAccessModifiers<?> & NodeWithSimpleName<?>>
+        MethodModel buildConstructor(String className, T decl, String descriptor,
+                                     NodeList<Parameter> params) {
+            int startLine = decl.getName().getBegin().map(p -> p.line)
+                    .orElseGet(() -> decl.getBegin().map(p -> p.line).orElse(-1));
+            int endLine   = decl.getEnd().map(p -> p.line).orElse(-1);
 
             return MethodModel.createConstructor(
                     className,
                     descriptor,
-                    parameterCount,
-                    parameterTypes,
-                    isPublic,
-                    isPrivate,
-                    isProtected,
+                    params.size(),
+                    extractParameterTypes(params),
+                    decl.isPublic(),
+                    decl.isPrivate(),
+                    decl.isProtected(),
                     startLine,
                     endLine,
-                    parameterNames
+                    extractParameterNames(params)
             );
         }
 

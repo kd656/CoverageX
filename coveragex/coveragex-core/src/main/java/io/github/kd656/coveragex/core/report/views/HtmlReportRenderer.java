@@ -111,7 +111,7 @@ public class HtmlReportRenderer implements ReportRenderer {
         String rawSectionId = HtmlNavTreeBuilder.sectionId(cm.classId());
         Path dataFile = targetDir.resolve(rawSectionId + ".data.js");
 
-        Path sourceFile = resolveSourceFile(cm.classId(), sourceDirectory);
+        Path sourceFile = resolveSourceFile(cm, sourceDirectory);
         List<Insight> classInsights = insightsByClass.getOrDefault(cm.classId(), Collections.emptyList());
 
         String prefixedSectionId = sectionIdPrefix + rawSectionId;
@@ -119,8 +119,15 @@ public class HtmlReportRenderer implements ReportRenderer {
         Files.writeString(dataFile, content, StandardCharsets.UTF_8);
     }
 
-    private Path resolveSourceFile(String classId, Path sourceDirectory) {
+    private Path resolveSourceFile(ClassMetrics cm, Path sourceDirectory) {
         if (sourceDirectory == null) return null;
+        if (cm.sourceFile() != null && !cm.sourceFile().isBlank()) {
+            Path sourceMapped = sourceDirectory.resolve(cm.sourceFile());
+            if (Files.exists(sourceMapped)) {
+                return sourceMapped;
+            }
+        }
+        String classId = cm.classId();
         Path candidate = sourceDirectory.resolve(classId + ".java");
         return Files.exists(candidate) ? candidate : null;
     }

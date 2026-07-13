@@ -58,7 +58,8 @@ public final class ModuleCoverageLoader {
                     descriptor.scopeId(),
                     descriptor.displayName(),
                     descriptor.sourceDirectory(),
-                    data));
+                    data,
+                    sourceFilesByClassId(descriptor)));
         }
         return inputs;
     }
@@ -88,5 +89,15 @@ public final class ModuleCoverageLoader {
                 + "synthesized zero-coverage entries from its SemanticIndex.",
                 descriptor.displayName());
         return new ExecutionData(classes);
+    }
+
+    private Map<String, String> sourceFilesByClassId(ModuleCoverageDescriptor descriptor) throws IOException {
+        if (descriptor.mapFile() == null || !Files.exists(descriptor.mapFile())) {
+            return Map.of();
+        }
+        SemanticIndex index = semanticIndexLoader.load(descriptor.mapFile());
+        Map<String, String> sourceFiles = new LinkedHashMap<>();
+        index.getClasses().forEach((classId, model) -> sourceFiles.put(classId, model.getSourceFile()));
+        return sourceFiles;
     }
 }

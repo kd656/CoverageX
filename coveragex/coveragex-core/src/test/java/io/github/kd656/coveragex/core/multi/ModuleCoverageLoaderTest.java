@@ -46,6 +46,9 @@ class ModuleCoverageLoaderTest {
         assertThat(inputs).hasSize(1);
         assertThat(inputs.getFirst().executionData().classes().keySet())
                 .containsExactlyInAnyOrder("com/example/dto/UserRecord", "com/example/dto/AddressDto");
+        assertThat(inputs.getFirst().sourceFilesByClassId())
+                .containsEntry("com/example/dto/UserRecord", "UserRecord.java")
+                .containsEntry("com/example/dto/AddressDto", "AddressDto.java");
         for (ClassCoverage cc : inputs.getFirst().executionData().classes().values()) {
             assertThat(cc.probeHits()).isEmpty();
         }

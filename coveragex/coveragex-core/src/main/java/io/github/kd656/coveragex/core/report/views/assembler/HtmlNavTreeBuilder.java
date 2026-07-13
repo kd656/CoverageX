@@ -49,17 +49,25 @@ public final class HtmlNavTreeBuilder {
         boolean smallProject = classes.size() <= 15;
         String firstClassId = classes.getFirst().classId();
 
-        TreeNode root = new TreeNode("", null);
+        TreeNode root = new TreeNode("", null, NodeKind.PACKAGE);
         for (ClassMetrics cm : classes) {
             String[] segments = cm.classId().split("/");
             TreeNode current = root;
             for (int i = 0; i < segments.length - 1; i++) {
                 String seg = segments[i];
                 final TreeNode parent = current;
-                current = current.children.computeIfAbsent(seg, s -> new TreeNode(s, parent));
+                current = current.children.computeIfAbsent(seg, s -> new TreeNode(s, parent, NodeKind.PACKAGE));
             }
-            String leafSeg = segments[segments.length - 1];
-            current.children.put(leafSeg, new TreeNode(leafSeg, current, cm));
+            String[] classSegments = segments[segments.length - 1].split("\\$");
+            for (int i = 0; i < classSegments.length; i++) {
+                String classSegment = classSegments[i];
+                final TreeNode parent = current;
+                current = current.children.computeIfAbsent(
+                        classSegment, s -> new TreeNode(s, parent, NodeKind.CLASS));
+                if (i == classSegments.length - 1) {
+                    current.leaf = cm;
+                }
+            }
         }
 
         return convertChildren(root, insightsByClass, firstClassId, smallProject, "",
@@ -87,7 +95,10 @@ public final class HtmlNavTreeBuilder {
             TreeNode child = entry.getValue();
             String childPath = parentPath.isEmpty() ? segment : parentPath + "/" + segment;
 
-            if (child.leaf != null) {
+            if (child.kind == NodeKind.CLASS && child.leaf != null && !child.children.isEmpty()) {
+                files.add(toClassGroup(child, insightsByClass, firstClassId, smallProject, childPath,
+                        sectionIdPrefix, payloadPathFn));
+            } else if (child.leaf != null) {
                 ClassMetrics cm = child.leaf;
                 List<Insight> ci = insightsByClass.getOrDefault(cm.classId(), Collections.emptyList());
                 boolean hasCrit = anyOfSeverity(ci, Severity.CRITICAL);
@@ -99,7 +110,7 @@ public final class HtmlNavTreeBuilder {
                 files.add(new HtmlNavNode.File(
                         prefixedSectionId,
                         payloadPath,
-                        cm.simpleName(),
+                        displayName(cm),
                         cm.lineCoveragePercent(),
                         hasCrit, hasWarn, hasPos));
             } else {
@@ -122,12 +133,46 @@ public final class HtmlNavTreeBuilder {
         }
 
         folders.sort(Comparator.comparing(n -> ((HtmlNavNode.Folder) n).label()));
-        files.sort(Comparator.comparing(n -> ((HtmlNavNode.File) n).simpleName()));
+        files.sort(Comparator.comparing(this::nodeLabel));
 
         List<HtmlNavNode> result = new ArrayList<>(folders.size() + files.size());
         result.addAll(folders);
         result.addAll(files);
         return result;
+    }
+
+    private HtmlNavNode.ClassGroup toClassGroup(TreeNode child,
+                                                Map<String, List<Insight>> insightsByClass,
+                                                String firstClassId,
+                                                boolean smallProject,
+                                                String childPath,
+                                                String sectionIdPrefix,
+                                                PayloadPathFunction payloadPathFn) {
+        ClassMetrics cm = child.leaf;
+        String rawSectionId = sectionId(cm.classId());
+        String prefixedSectionId = sectionIdPrefix + rawSectionId;
+        String payloadPath = payloadPathFn.pathFor(rawSectionId);
+        List<Insight> ci = insightsByClass.getOrDefault(cm.classId(), Collections.emptyList());
+        boolean hasCrit = anyOfSeverity(ci, Severity.CRITICAL)
+                || anyChildHas(child, insightsByClass, Severity.CRITICAL);
+        boolean hasWarn = anyOfSeverity(ci, Severity.WARNING)
+                || anyChildHas(child, insightsByClass, Severity.WARNING);
+        boolean hasPos = anyOfSeverity(ci, Severity.POSITIVE)
+                || anyChildHas(child, insightsByClass, Severity.POSITIVE);
+        boolean expanded = smallProject || isOnPathToClass(child, firstClassId);
+        List<HtmlNavNode> children = convertChildren(
+                child, insightsByClass, firstClassId, smallProject, childPath,
+                sectionIdPrefix, payloadPathFn);
+        return new HtmlNavNode.ClassGroup(
+                prefixedSectionId,
+                payloadPath,
+                child.segment,
+                cm.lineCoveragePercent(),
+                hasCrit,
+                hasWarn,
+                hasPos,
+                children,
+                expanded);
     }
 
     private static boolean anyOfSeverity(List<Insight> insights, Severity severity) {
@@ -140,21 +185,15 @@ public final class HtmlNavTreeBuilder {
     private double computeAverageCoverage(TreeNode node) {
         List<ClassMetrics> leaves = new ArrayList<>();
         collectLeaves(node, leaves);
-        if (leaves.isEmpty()) return 0.0;
-        double sum = 0.0;
-        for (ClassMetrics cm : leaves) {
-            sum += cm.lineCoveragePercent();
-        }
-        return sum / leaves.size();
+        return ClassMetrics.aggregateProbeCoverage(leaves);
     }
 
     private void collectLeaves(TreeNode node, List<ClassMetrics> into) {
         if (node.leaf != null) {
             into.add(node.leaf);
-        } else {
-            for (TreeNode child : node.children.values()) {
-                collectLeaves(child, into);
-            }
+        }
+        for (TreeNode child : node.children.values()) {
+            collectLeaves(child, into);
         }
     }
 
@@ -162,9 +201,11 @@ public final class HtmlNavTreeBuilder {
                                       Map<String, List<Insight>> insightsByClass,
                                       Severity severity) {
         if (node.leaf != null) {
-            return anyOfSeverity(
+            if (anyOfSeverity(
                     insightsByClass.getOrDefault(node.leaf.classId(), Collections.emptyList()),
-                    severity);
+                    severity)) {
+                return true;
+            }
         }
         for (TreeNode child : node.children.values()) {
             if (anyDescendantHas(child, insightsByClass, severity)) return true;
@@ -172,12 +213,42 @@ public final class HtmlNavTreeBuilder {
         return false;
     }
 
+    private boolean anyChildHas(TreeNode node,
+                                Map<String, List<Insight>> insightsByClass,
+                                Severity severity) {
+        for (TreeNode child : node.children.values()) {
+            if (anyDescendantHas(child, insightsByClass, severity)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean isOnPathToClass(TreeNode node, String classId) {
-        if (node.leaf != null) return node.leaf.classId().equals(classId);
+        if (node.leaf != null && node.leaf.classId().equals(classId)) return true;
         for (TreeNode child : node.children.values()) {
             if (isOnPathToClass(child, classId)) return true;
         }
         return false;
+    }
+
+    private String displayName(ClassMetrics cm) {
+        String simpleName = cm.simpleName();
+        int dot = simpleName.lastIndexOf('.');
+        return dot >= 0 ? simpleName.substring(dot + 1) : simpleName;
+    }
+
+    private String nodeLabel(HtmlNavNode node) {
+        if (node instanceof HtmlNavNode.File file) {
+            return file.simpleName();
+        }
+        if (node instanceof HtmlNavNode.ClassGroup group) {
+            return group.label();
+        }
+        if (node instanceof HtmlNavNode.Folder folder) {
+            return folder.label();
+        }
+        return "";
     }
 
     /** Same section-id derivation used by both flat and scoped reports. */
@@ -189,17 +260,19 @@ public final class HtmlNavTreeBuilder {
     private static final class TreeNode {
         final String segment;
         final TreeNode parent;
-        final ClassMetrics leaf;
+        final NodeKind kind;
+        ClassMetrics leaf;
         final Map<String, TreeNode> children = new LinkedHashMap<>();
 
-        TreeNode(String segment, TreeNode parent) {
-            this(segment, parent, null);
-        }
-
-        TreeNode(String segment, TreeNode parent, ClassMetrics leaf) {
+        TreeNode(String segment, TreeNode parent, NodeKind kind) {
             this.segment = segment;
             this.parent = parent;
-            this.leaf = leaf;
+            this.kind = kind;
         }
+    }
+
+    private enum NodeKind {
+        PACKAGE,
+        CLASS
     }
 }

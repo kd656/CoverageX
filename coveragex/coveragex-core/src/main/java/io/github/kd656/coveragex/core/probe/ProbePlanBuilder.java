@@ -4,14 +4,18 @@ import io.github.kd656.coveragex.api.data.ProbeMetadata;
 import io.github.kd656.coveragex.core.analysis.source.model.ClassModel;
 import io.github.kd656.coveragex.core.analysis.source.model.MethodModel;
 import io.github.kd656.coveragex.core.analysis.source.model.MethodReference;
+import io.github.kd656.coveragex.core.instrument.RecordMethods;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.RecordComponentVisitor;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -52,6 +56,8 @@ public final class ProbePlanBuilder {
         private final ClassModel classModel;
         private final AtomicInteger probeCounter;
         private final List<ProbeMetadata> metadata;
+        private boolean recordClass;
+        private final Map<String, String> recordComponents = new HashMap<>();
 
         private PlanningClassVisitor(int api, ClassModel classModel,
                                      AtomicInteger probeCounter, List<ProbeMetadata> metadata) {
@@ -62,15 +68,35 @@ public final class ProbePlanBuilder {
         }
 
         @Override
+        public void visit(int version, int access, String name, String signature,
+                          String superName, String[] interfaces) {
+            recordClass = RecordMethods.isRecord(access);
+            super.visit(version, access, name, signature, superName, interfaces);
+        }
+
+        @Override
+        public RecordComponentVisitor visitRecordComponent(String name, String descriptor, String signature) {
+            if (recordClass) recordComponents.put(name, descriptor);
+            return super.visitRecordComponent(name, descriptor, signature);
+        }
+
+        @Override
         public MethodVisitor visitMethod(int access, String name, String descriptor,
                                          String signature, String[] exceptions) {
-            if ((access & Opcodes.ACC_ABSTRACT) != 0) {
+            if ((access & Opcodes.ACC_ABSTRACT) != 0
+                    || (recordClass && RecordMethods.isGeneratedObjectMethod(name, descriptor))) {
                 return null;
             }
 
             MethodModel methodModel = classModel != null
                     ? classModel.getMethods().get(new MethodReference(name, descriptor))
                     : null;
+
+            // Skip synthetic component accessors
+            if (recordClass && methodModel == null
+                    && RecordMethods.isComponentAccessorShape(name, descriptor, recordComponents)) {
+                return null;
+            }
 
             return new PlanningMethodVisitor(api, name, methodModel, probeCounter, metadata);
         }

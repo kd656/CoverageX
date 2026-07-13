@@ -11,9 +11,10 @@ import java.util.List;
  * ({@code case File(var sectionId, ...) -> ...}) so future field additions do
  * not break call sites.</p>
  */
-public sealed interface HtmlNavNode permits HtmlNavNode.Folder, HtmlNavNode.File {
+public sealed interface HtmlNavNode permits HtmlNavNode.Folder, HtmlNavNode.File, HtmlNavNode.ClassGroup {
 
     default boolean isFolder() { return false; }
+    default boolean isClassGroup() { return false; }
 
     record Folder(
         String label,
@@ -53,5 +54,24 @@ public sealed interface HtmlNavNode permits HtmlNavNode.Folder, HtmlNavNode.File
                  hasWarningInsight,
                  hasPositiveInsight);
         }
+    }
+
+    record ClassGroup(
+        String sectionId,
+        String payloadPath,
+        String label,
+        double coveragePercent,
+        boolean hasCriticalInsight,
+        boolean hasWarningInsight,
+        boolean hasPositiveInsight,
+        List<HtmlNavNode> children,
+        boolean expandedByDefault
+    ) implements HtmlNavNode {
+        public ClassGroup {
+            children = List.copyOf(children);
+        }
+
+        @Override
+        public boolean isClassGroup() { return true; }
     }
 }

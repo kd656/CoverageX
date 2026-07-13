@@ -13,12 +13,15 @@ import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.RecordComponentVisitor;
 import org.objectweb.asm.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -113,6 +116,8 @@ public class SourceAwareProbeInjector implements ProbeInjector<SourceAwareInput>
         private final ClassModel classModel;
         private final AtomicInteger probeCounter;
         private final List<ProbeMetadata> metadataAccumulator;
+        private boolean recordClass;
+        private final Map<String, String> recordComponents = new HashMap<>();
 
         SourceAwareClassVisitor(int api, ClassVisitor cv, String className,
                                 ClassModel classModel,
@@ -126,12 +131,26 @@ public class SourceAwareProbeInjector implements ProbeInjector<SourceAwareInput>
         }
 
         @Override
+        public void visit(int version, int access, String name, String signature,
+                          String superName, String[] interfaces) {
+            recordClass = RecordMethods.isRecord(access);
+            super.visit(version, access, name, signature, superName, interfaces);
+        }
+
+        @Override
+        public RecordComponentVisitor visitRecordComponent(String name, String descriptor, String signature) {
+            if (recordClass) recordComponents.put(name, descriptor);
+            return super.visitRecordComponent(name, descriptor, signature);
+        }
+
+        @Override
         public MethodVisitor visitMethod(int access, String name, String descriptor,
                                         String signature, String[] exceptions) {
             MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
 
             // Skip abstract methods (no code to instrument)
-            if ((access & Opcodes.ACC_ABSTRACT) != 0 || mv == null) {
+            if ((access & Opcodes.ACC_ABSTRACT) != 0 || mv == null
+                    || (recordClass && RecordMethods.isGeneratedObjectMethod(name, descriptor))) {
                 return mv;
             }
 
@@ -140,6 +159,14 @@ public class SourceAwareProbeInjector implements ProbeInjector<SourceAwareInput>
             // in which case the visitor gracefully falls back to opcode placeholders.
             MethodReference ref = new MethodReference(name, descriptor);
             MethodModel methodModel = classModel.getMethods().get(ref);
+
+            // Skip compiler-generated record component accessors: they match the shape
+            // AND have no source-map entry. A user-written override matches the shape
+            // but WILL be in the source map, so it stays instrumented.
+            if (recordClass && methodModel == null
+                    && RecordMethods.isComponentAccessorShape(name, descriptor, recordComponents)) {
+                return mv;
+            }
 
             if (methodModel == null) {
                 LOG.trace("Method not in source map, using opcode fallback: {}.{}{}", className, name, descriptor);

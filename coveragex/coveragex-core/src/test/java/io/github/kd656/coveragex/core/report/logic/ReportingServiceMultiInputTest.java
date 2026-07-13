@@ -108,7 +108,7 @@ class ReportingServiceMultiInputTest {
         ClassCoverage cc = new ClassCoverage(classId, new boolean[]{true},
             Map.of(), Map.of(), List.of(), null);
         return new ReportInput(scopeId, scopeId, null,
-            new ExecutionData(Map.of(classId, cc)));
+            new ExecutionData(Map.of(classId, cc)), Map.of());
     }
 
     private static final class CapturingView implements ReportRenderer {

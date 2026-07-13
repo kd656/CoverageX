@@ -57,7 +57,7 @@ class HtmlReportRendererLayoutTest {
 
     private static ReportInput input(String scopeId, String classId) {
         return new ReportInput(scopeId, scopeId, null,
-            new ExecutionData(Map.of(classId, coverage(classId))));
+            new ExecutionData(Map.of(classId, coverage(classId))), Map.of());
     }
 
     private static ClassCoverage coverage(String classId) {
