@@ -3,10 +3,7 @@ package io.github.kd656.coveragex.maven;
 import io.github.kd656.coveragex.core.multi.CoverageArtifactPaths;
 import io.github.kd656.coveragex.core.multi.DefaultAggregateInputAssembler;
 import io.github.kd656.coveragex.core.multi.ModuleCoverageDescriptor;
-import io.github.kd656.coveragex.core.multi.ModuleCoverageLoader;
-import io.github.kd656.coveragex.core.multi.SemanticIndexLoader;
 import io.github.kd656.coveragex.core.report.ReportInput;
-import io.github.kd656.coveragex.core.scan.ClassCoverageFilter;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
@@ -37,13 +34,8 @@ public class ReportMojo extends AbstractCoverageReportMojo {
         ModuleCoverageDescriptor descriptor = MavenModuleCoverageDiscoverer
                 .descriptorFor(project, rootDir, destFile);
 
-        SemanticIndexLoader semanticIndexLoader = new SemanticIndexLoader();
-        ModuleCoverageLoader loader = new ModuleCoverageLoader(semanticIndexLoader);
-        ClassCoverageFilter filter = new ClassCoverageFilter(
-                includes != null ? includes : List.of(),
-                excludes != null ? excludes : List.of());
-        DefaultAggregateInputAssembler assembler = new DefaultAggregateInputAssembler(
-                () -> List.of(descriptor), loader, semanticIndexLoader, filter);
+        DefaultAggregateInputAssembler assembler = DefaultAggregateInputAssembler.create(
+                () -> List.of(descriptor), includes, excludes);
 
         try {
             return assembler.assemble();
