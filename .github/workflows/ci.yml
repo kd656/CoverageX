@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, fix/gradle-publish-job]  # TEMP: exercise snapshot publish on this branch — revert before merge
+    branches: [main]
   workflow_call:
 
 concurrency:
@@ -268,7 +268,7 @@ jobs:
   publish-version:
     name: Publish version
     needs: all-green
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fix/gradle-publish-job')  # TEMP: revert before merge
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     env:
