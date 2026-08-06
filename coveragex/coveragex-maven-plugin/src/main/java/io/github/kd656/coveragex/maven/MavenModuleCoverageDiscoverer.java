@@ -1,16 +1,16 @@
 package io.github.kd656.coveragex.maven;
 
 import io.github.kd656.coveragex.core.multi.CoverageArtifactPaths;
+import io.github.kd656.coveragex.core.multi.GlobPatterns;
 import io.github.kd656.coveragex.core.multi.ModuleCoverageDescriptor;
 import io.github.kd656.coveragex.core.multi.ModuleCoverageDiscoverer;
+import io.github.kd656.coveragex.core.multi.Scopes;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.project.MavenProject;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -48,12 +48,12 @@ public final class MavenModuleCoverageDiscoverer implements ModuleCoverageDiscov
             }
             raw.add(descriptorFor(project, rootDir, execFileName));
         }
-        return assignCollisionFreeScopeIds(raw);
+        return Scopes.deduplicateScopeIds(raw);
     }
 
     static ModuleCoverageDescriptor descriptorFor(MavenProject project, Path rootDir, String execFileName) {
         Path baseDir = project.getBasedir().toPath().toAbsolutePath().normalize();
-        Path relativePath = safeRelativize(rootDir, baseDir);
+        Path relativePath = Scopes.safeRelativize(rootDir, baseDir);
         CoverageArtifactPaths paths = MavenCoverageArtifactPaths.forProject(project, execFileName);
         Path classesDir = Path.of(project.getBuild().getOutputDirectory());
         Path sourceDir = project.getBuild().getSourceDirectory() != null
@@ -75,39 +75,7 @@ public final class MavenModuleCoverageDiscoverer implements ModuleCoverageDiscov
 
     /** Turns a raw artifact id into a filesystem/DOM-safe scope id. */
     static String sanitize(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return "module";
-        }
-        String replaced = raw.replaceAll("[^A-Za-z0-9._-]", "-")
-                .replaceAll("-+", "-")
-                .replaceAll("^-+|-+$", "");
-        return replaced.isBlank() ? "module" : replaced;
-    }
-
-    /**
-     * Appends {@code -2}, {@code -3}, ... to duplicate sanitized artifact ids.
-     * Deterministic because iteration order is reactor order.
-     */
-    private List<ModuleCoverageDescriptor> assignCollisionFreeScopeIds(
-            List<ModuleCoverageDescriptor> raw) {
-        Map<String, Integer> counts = new LinkedHashMap<>();
-        List<ModuleCoverageDescriptor> assigned = new ArrayList<>(raw.size());
-        for (ModuleCoverageDescriptor d : raw) {
-            String base = d.scopeId();
-            int seen = counts.getOrDefault(base, 0) + 1;
-            counts.put(base, seen);
-            String finalScopeId = seen == 1 ? base : base + "-" + seen;
-            assigned.add(new ModuleCoverageDescriptor(
-                    finalScopeId,
-                    d.displayName(),
-                    d.baseDirectory(),
-                    d.relativePath(),
-                    d.execFile(),
-                    d.mapFile(),
-                    d.sourceDirectory(),
-                    d.classesDirectory()));
-        }
-        return assigned;
+        return Scopes.sanitize(raw, "module");
     }
 
     private boolean isExcluded(String artifactId) {
@@ -128,29 +96,8 @@ public final class MavenModuleCoverageDiscoverer implements ModuleCoverageDiscov
             if (raw == null || raw.isBlank()) {
                 continue;
             }
-            compiled.add(Pattern.compile(globToRegex(raw)));
+            compiled.add(GlobPatterns.compile(raw));
         }
         return compiled;
-    }
-
-    private static String globToRegex(String glob) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < glob.length(); i++) {
-            char c = glob.charAt(i);
-            if (c == '*') {
-                sb.append(".*");
-            } else {
-                sb.append(Pattern.quote(String.valueOf(c)));
-            }
-        }
-        return sb.toString();
-    }
-
-    private static Path safeRelativize(Path root, Path child) {
-        try {
-            return root.relativize(child);
-        } catch (IllegalArgumentException e) {
-            return child.getFileName();
-        }
     }
 }

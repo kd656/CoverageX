@@ -9,9 +9,8 @@ import java.util.List;
 /**
  * Build-tool-neutral assembler: discover → load → build ownership → route.
  *
- * <p>Every collaborator is an interface or a pure core class, so a Maven mojo
- * and a future Gradle task instantiate this same class with only their own
- * {@link ModuleCoverageDiscoverer} implementation.</p>
+ * <p>Every collaborator is an interface or a pure core class, so the Maven mojos and Gradle
+ * tasks share it, each supplying only their own {@link ModuleCoverageDiscoverer}.</p>
  */
 public final class DefaultAggregateInputAssembler implements AggregateInputAssembler {
 
@@ -28,6 +27,24 @@ public final class DefaultAggregateInputAssembler implements AggregateInputAssem
         this.loader = loader;
         this.semanticIndexLoader = semanticIndexLoader;
         this.aggregateFilter = aggregateFilter;
+    }
+
+    /**
+     * Builds an assembler with the standard collaborators (one shared {@link SemanticIndexLoader}
+     * and an include/exclude {@link ClassCoverageFilter}) so callers don't repeat the wiring.
+     *
+     * @param includes may be {@code null} (treated as empty)
+     * @param excludes may be {@code null} (treated as empty)
+     */
+    public static DefaultAggregateInputAssembler create(ModuleCoverageDiscoverer discoverer,
+                                                        List<String> includes,
+                                                        List<String> excludes) {
+        SemanticIndexLoader semanticIndexLoader = new SemanticIndexLoader();
+        ModuleCoverageLoader loader = new ModuleCoverageLoader(semanticIndexLoader);
+        ClassCoverageFilter filter = new ClassCoverageFilter(
+                includes != null ? includes : List.of(),
+                excludes != null ? excludes : List.of());
+        return new DefaultAggregateInputAssembler(discoverer, loader, semanticIndexLoader, filter);
     }
 
     @Override

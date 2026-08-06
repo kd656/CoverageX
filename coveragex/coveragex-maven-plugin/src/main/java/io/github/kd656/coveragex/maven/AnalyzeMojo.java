@@ -33,9 +33,6 @@ public class AnalyzeMojo extends AbstractMojo {
     @Parameter(defaultValue = "${session}", readonly = true, required = true)
     private MavenSession session;
 
-    @Parameter(property = "coveragex.includeTests", defaultValue = "false")
-    private boolean includeTests;
-
     @Override
     public void execute() throws MojoExecutionException {
         try {

@@ -1,12 +1,9 @@
 package io.github.kd656.coveragex.maven;
 
+import io.github.kd656.coveragex.core.report.CoverageReportRunner;
 import io.github.kd656.coveragex.core.report.ReportConfig;
 import io.github.kd656.coveragex.core.report.ReportInput;
-import io.github.kd656.coveragex.core.report.logic.ReportingService;
-import io.github.kd656.coveragex.core.report.ThresholdEvaluation;
-import io.github.kd656.coveragex.core.report.ThresholdEvaluator;
 import io.github.kd656.coveragex.core.report.ThresholdMode;
-import io.github.kd656.coveragex.core.report.ThresholdOutcomeReporter;
 import io.github.kd656.coveragex.core.report.ThresholdViolationException;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -130,13 +127,11 @@ public abstract class AbstractCoverageReportMojo extends AbstractMojo {
                 orDefault(enableOverCoverageAnalysis, enableDefault),
                 minimumCoverage);
 
-        new ReportingService().report(config, inputs);
+        CoverageReportRunner runner = new CoverageReportRunner();
+        runner.render(config, inputs);
         getLog().info("coveragex: report written to " + outputDir.resolve("index.html"));
-
-        ThresholdEvaluation eval = new ThresholdEvaluator()
-                .evaluate(inputs, minimumCoverage, thresholdMode());
         try {
-            new ThresholdOutcomeReporter().apply(eval, failOnLowCoverage);
+            runner.gate(inputs, minimumCoverage, thresholdMode(), failOnLowCoverage);
         } catch (ThresholdViolationException e) {
             throw new MojoFailureException(e.getMessage());
         }

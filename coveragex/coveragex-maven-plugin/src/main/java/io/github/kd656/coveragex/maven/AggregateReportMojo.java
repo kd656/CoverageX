@@ -1,10 +1,7 @@
 package io.github.kd656.coveragex.maven;
 
 import io.github.kd656.coveragex.core.multi.DefaultAggregateInputAssembler;
-import io.github.kd656.coveragex.core.multi.ModuleCoverageLoader;
-import io.github.kd656.coveragex.core.multi.SemanticIndexLoader;
 import io.github.kd656.coveragex.core.report.ReportInput;
-import io.github.kd656.coveragex.core.scan.ClassCoverageFilter;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
@@ -46,13 +43,8 @@ public class AggregateReportMojo extends AbstractCoverageReportMojo {
 
         MavenModuleCoverageDiscoverer discoverer = new MavenModuleCoverageDiscoverer(
                 session, project, destFile, excludeModules);
-        SemanticIndexLoader semanticIndexLoader = new SemanticIndexLoader();
-        ModuleCoverageLoader loader = new ModuleCoverageLoader(semanticIndexLoader);
-        ClassCoverageFilter filter = new ClassCoverageFilter(
-                includes != null ? includes : List.of(),
-                excludes != null ? excludes : List.of());
-        DefaultAggregateInputAssembler assembler = new DefaultAggregateInputAssembler(
-                discoverer, loader, semanticIndexLoader, filter);
+        DefaultAggregateInputAssembler assembler = DefaultAggregateInputAssembler.create(
+                discoverer, includes, excludes);
 
         try {
             List<ReportInput> routed = assembler.assemble();
