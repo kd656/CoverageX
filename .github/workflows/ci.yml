@@ -323,7 +323,7 @@ jobs:
   publish-gradle-plugin:
     name: Publish Gradle plugin
     needs: publish-version
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
