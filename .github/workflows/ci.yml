@@ -335,6 +335,12 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Restore local CoverageX artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: m2-coveragex
+          path: ~/.m2/repository/io/github/kd656
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
