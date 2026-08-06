@@ -323,7 +323,7 @@ jobs:
   publish-gradle-plugin:
     name: Publish Gradle plugin
     needs: publish-version
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fix/gradle-publish-job')  # TEMP: revert before merge
     runs-on: ubuntu-latest
 
     steps:
@@ -334,6 +334,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+
+      - name: Restore local CoverageX artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: m2-coveragex
+          path: ~/.m2/repository/io/github/kd656
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4

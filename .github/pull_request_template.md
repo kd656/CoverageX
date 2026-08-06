@@ -5,6 +5,8 @@ Also include information whether your changes break backward compatibility, cont
 ## Area
 Select all that apply:
 - Maven plugin
+- Gradle plugin
+- Shared build-tool core (`coveragex-core` / `coveragex-api`)
 - JVM agent / instrumentation
 - Binary execution data format
 - Line coverage
@@ -34,13 +36,16 @@ Select all that apply and include commands or notes:
 Commands run:
 
 ```bash
-# Example:
+# Examples:
 # mvn test -pl coveragex-agent
+# ./gradlew -p coveragex/coveragex-gradle-plugin check
 ```
 
 ## CoverageX Checklist
 - [ ] Hot-path instrumentation or probe-recording changes avoid unnecessary allocation and locking.
-- [ ] Maven plugin changes include configuration and failure-mode coverage.
+- [ ] Build-tool plugin changes (Maven/Gradle) include configuration and failure-mode coverage.
+- [ ] Behavior is kept in parity across Maven and Gradle — shared logic lives in `coveragex-core`, not duplicated per plugin.
+- [ ] Gradle changes stay configuration-cache compatible (no `Project` access in task actions).
 - [ ] Report changes include representative output or snapshots where useful.
 - [ ] Java version compatibility was considered for changed bytecode or fixture behavior.
 
