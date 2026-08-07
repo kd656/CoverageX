@@ -1,11 +1,11 @@
 plugins {
     java
-    id("io.github.kd656.coveragex") version "0.1.0-SNAPSHOT"
+    id("io.github.kd656.coveragex") version "0.2.0-SNAPSHOT"
 }
 
 allprojects {
     group = "example.coveragex.multimodule"
-    version = "0.1.0-SNAPSHOT"
+    version = "0.2.0-SNAPSHOT"
 }
 
 subprojects {
