@@ -8,8 +8,10 @@ on:
   push:
     branches:
       - 'release/**'
+  pull_request:
+    branches:
+      - 'release/**'
   workflow_dispatch:
-
 concurrency:
   # Never cancel an in-flight publish.
   group: release-${{ github.ref }}
