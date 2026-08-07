@@ -1,8 +1,6 @@
-import com.vanniktech.maven.publish.SonatypeHost
-
 plugins {
     `java-gradle-plugin`
-    id("com.vanniktech.maven.publish") version "0.30.0"
+    id("com.vanniktech.maven.publish") version "0.37.0"
 }
 
 group = "io.github.kd656"
@@ -49,7 +47,7 @@ tasks.withType<Test>().configureEach {
 }
 
 mavenPublishing {
-    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL, automaticRelease = false)
+    publishToMavenCentral(automaticRelease = false)
 
     // Only sign when a key is supplied
     if (project.hasProperty("signingInMemoryKey")) {
