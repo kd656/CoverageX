@@ -68,10 +68,12 @@ jobs:
         env:
           CENTRAL_PORTAL_USERNAME: ${{ secrets.CENTRAL_PORTAL_USERNAME }}
           CENTRAL_PORTAL_PASSWORD: ${{ secrets.CENTRAL_PORTAL_PASSWORD }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          # maven-gpg-plugin reads the passphrase from this env var natively. Passing it
+          # via -Dgpg.passphrase is deprecated and runs the value through the shell, where
+          # characters like $ ` \ " get mangled -> "gpg: Bad passphrase".
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           mvn -B -Prelease \
-            -Dgpg.passphrase="${GPG_PASSPHRASE}" \
             -pl "${PUBLISH_MODULES}" \
             -am deploy
 
