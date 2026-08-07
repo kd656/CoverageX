@@ -1,6 +1,8 @@
+import com.vanniktech.maven.publish.SonatypeHost
+
 plugins {
     `java-gradle-plugin`
-    `maven-publish`
+    id("com.vanniktech.maven.publish") version "0.30.0"
 }
 
 group = "io.github.kd656"
@@ -46,15 +48,41 @@ tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 }
 
-publishing {
-    repositories {
-        maven {
-            name = "centralPortalSnapshots"
-            url = uri("https://central.sonatype.com/repository/maven-snapshots/")
-            credentials {
-                username = System.getenv("CENTRAL_PORTAL_USERNAME")
-                password = System.getenv("CENTRAL_PORTAL_PASSWORD")
+mavenPublishing {
+    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL, automaticRelease = false)
+
+    // Only sign when a key is supplied
+    if (project.hasProperty("signingInMemoryKey")) {
+        signAllPublications()
+    }
+
+    coordinates(group.toString(), "coveragex-gradle-plugin", version.toString())
+
+    pom {
+        name.set("CoverageX Gradle Plugin")
+        description.set("Java code coverage plugin backed by the CoverageX agent.")
+        url.set("https://github.com/kd656/CoverageX")
+
+        licenses {
+            license {
+                name.set("FSL-1.1-ALv2")
+                url.set("https://github.com/kd656/CoverageX/blob/main/LICENSE.md")
+                distribution.set("repo")
             }
+        }
+
+        developers {
+            developer {
+                id.set("kd656")
+                name.set("kd656")
+                url.set("https://github.com/kd656")
+            }
+        }
+
+        scm {
+            url.set("https://github.com/kd656/CoverageX")
+            connection.set("scm:git:https://github.com/kd656/CoverageX.git")
+            developerConnection.set("scm:git:git@github.com:kd656/CoverageX.git")
         }
     }
 }
