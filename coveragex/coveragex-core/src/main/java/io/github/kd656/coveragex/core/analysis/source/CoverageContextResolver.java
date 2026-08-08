@@ -44,14 +44,9 @@ public class CoverageContextResolver {
             return null;
         }
 
-        // Preferred: map keys are internal names (org/example/Foo)
-        ClassModel cm = index.getClasses().get(classInternalName);
-        if (cm != null) {
-            return cm;
-        }
-
-        // Fallback: map keys are dotted names (org.example.Foo)
-        return index.getClasses().get(classInternalName.replace('/', '.'));
+        // SemanticIndex keys are JVM internal names (see SemanticIndex.classes javadoc
+        // and SourceCodeAnalyzer.findClassName). No form-fallback needed.
+        return index.getClasses().get(classInternalName);
     }
 
     private SemanticIndex loadIndexOrNull() {

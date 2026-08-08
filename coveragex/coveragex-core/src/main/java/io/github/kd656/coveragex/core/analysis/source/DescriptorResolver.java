@@ -2,9 +2,11 @@ package io.github.kd656.coveragex.core.analysis.source;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.body.CompactConstructorDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.nodeTypes.NodeWithName;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
@@ -24,11 +26,14 @@ public final class DescriptorResolver {
 
     private final MethodDescriptorProvider methodDescriptorProvider;
     private final ConstructorDescriptorProvider constructorDescriptorProvider;
+    private final ManualDescriptorBuilder manualBuilder;
 
     private DescriptorResolver(MethodDescriptorProvider methodDescriptorProvider,
-                              ConstructorDescriptorProvider constructorDescriptorProvider) {
+                              ConstructorDescriptorProvider constructorDescriptorProvider,
+                              ManualDescriptorBuilder manualBuilder) {
         this.methodDescriptorProvider = Objects.requireNonNull(methodDescriptorProvider);
         this.constructorDescriptorProvider = Objects.requireNonNull(constructorDescriptorProvider);
+        this.manualBuilder = Objects.requireNonNull(manualBuilder);
     }
 
     public String resolveMethodDescriptor(CompilationUnit cu, MethodDeclaration methodDecl) {
@@ -37,6 +42,27 @@ public final class DescriptorResolver {
 
     public String resolveConstructorDescriptor(CompilationUnit cu, ConstructorDeclaration ctorDecl) {
         return constructorDescriptorProvider.getConstructorDescriptor(cu, ctorDecl);
+    }
+
+    /**
+     * Resolves the JVM descriptor for a record's compact constructor.
+     *
+     * <p>A compact constructor has no explicit parameter list; its bytecode signature
+     * is derived from the enclosing record's header parameters. Reuses the same
+     * type-name resolution chain as the regular-constructor path.</p>
+     */
+    public String resolveCompactConstructorDescriptor(CompilationUnit cu, CompactConstructorDeclaration ccd) {
+        RecordDeclaration record = ccd.findAncestor(RecordDeclaration.class)
+                .orElseThrow(() -> new IllegalStateException("Compact constructor outside record"));
+        return manualBuilder.buildConstructorDescriptor(cu, record.getParameters());
+    }
+
+    /**
+     * Resolves the JVM descriptor for a record's implicit canonical constructor.
+     * Same signature as the compact form: parameters come straight from the record header.
+     */
+    public String resolveCanonicalConstructorDescriptor(CompilationUnit cu, RecordDeclaration record) {
+        return manualBuilder.buildConstructorDescriptor(cu, record.getParameters());
     }
 
     /**
@@ -58,7 +84,8 @@ public final class DescriptorResolver {
                 ),
                 new ChainedConstructorDescriptorProvider(
                         List.of(new SymbolSolverConstructorDescriptorProvider(), manual)
-                )
+                ),
+                manual
         );
     }
 
@@ -165,9 +192,14 @@ public final class DescriptorResolver {
 
         @Override
         public String getConstructorDescriptor(CompilationUnit cu, ConstructorDeclaration cd) {
+            return buildConstructorDescriptor(cu, cd.getParameters());
+        }
+
+        String buildConstructorDescriptor(CompilationUnit cu,
+                                          com.github.javaparser.ast.NodeList<Parameter> parameters) {
             StringBuilder sb = new StringBuilder();
             sb.append("(");
-            for (Parameter p : cd.getParameters()) {
+            for (Parameter p : parameters) {
                 sb.append(toJvmType(cu, p.getType()));
             }
             sb.append(")V");

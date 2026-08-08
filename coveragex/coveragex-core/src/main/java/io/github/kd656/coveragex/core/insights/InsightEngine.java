@@ -449,6 +449,8 @@ public class InsightEngine {
             }
         }
 
-        return methodProbe.startLine() == methodProbe.endLine() && nonMethodProbeCount == 1;
+        return methodProbe.startLine() == methodProbe.endLine()
+                && nonMethodProbeCount == 1
+                && methodProbe.parameterNames().isEmpty();
     }
 }

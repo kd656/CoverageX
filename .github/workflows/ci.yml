@@ -136,13 +136,134 @@ jobs:
           path: coveragex/coveragex-compatibility-tests/target/plan-dumps/
           if-no-files-found: ignore
 
-  all-green:
-    name: All green
-    needs: [build, compatibility-matrix]
+  maven-examples:
+    name: Maven example (${{ matrix.example }})
+    needs: build
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - junit5-example-project
+          - multi-module-example
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Restore local CoverageX artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: m2-coveragex
+          path: ~/.m2/repository/io/github/kd656
+
+      - name: Build example with Maven
+        working-directory: examples/${{ matrix.example }}
+        run: mvn -B clean verify
+
+  gradle-plugin-build:
+    name: Build Gradle plugin
+    needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - run: echo "Build and compatibility matrix passed."
+      - uses: actions/checkout@v5
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Restore local CoverageX artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: m2-coveragex
+          path: ~/.m2/repository/io/github/kd656
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and test (unit + TestKit) and publishToMavenLocal
+        working-directory: coveragex/coveragex-gradle-plugin
+        run: ./gradlew --no-daemon check publishToMavenLocal
+
+      - name: Upload plugin to shared m2 subtree
+        uses: actions/upload-artifact@v5
+        with:
+          name: m2-coveragex-gradle
+          path: ~/.m2/repository/io/github/kd656/coveragex-gradle-plugin
+          retention-days: 1
+
+      - name: Upload plugin marker artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: m2-coveragex-gradle-marker
+          path: ~/.m2/repository/io/github/kd656/coveragex/io.github.kd656.coveragex.gradle.plugin
+          retention-days: 1
+
+  gradle-examples:
+    name: Gradle example (${{ matrix.example }})
+    needs: [build, gradle-plugin-build]
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - example: junit5-example-project
+            task: clean check
+          - example: multi-module-example
+            task: clean coveragexAggregateReport
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Restore local CoverageX artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: m2-coveragex
+          path: ~/.m2/repository/io/github/kd656
+
+      - name: Restore Gradle plugin from previous job
+        uses: actions/download-artifact@v5
+        with:
+          name: m2-coveragex-gradle
+          path: ~/.m2/repository/io/github/kd656/coveragex-gradle-plugin
+
+      - name: Restore Gradle plugin marker
+        uses: actions/download-artifact@v5
+        with:
+          name: m2-coveragex-gradle-marker
+          path: ~/.m2/repository/io/github/kd656/coveragex/io.github.kd656.coveragex.gradle.plugin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build example with Gradle
+        working-directory: examples/${{ matrix.example }}
+        run: ./gradlew --no-daemon ${{ matrix.task }}
+
+  all-green:
+    name: All green
+    needs: [build, compatibility-matrix, maven-examples, gradle-plugin-build, gradle-examples]
+    runs-on: ubuntu-latest
+
+    steps:
+      - run: echo "Build, compatibility matrix, examples (Maven + Gradle) and Gradle plugin all passed."
 
   publish-version:
     name: Publish version
@@ -198,3 +319,56 @@ jobs:
             -DskipTests \
             -pl "${PUBLISH_MODULES}" \
             -am deploy
+
+  publish-gradle-plugin:
+    name: Publish Gradle plugin
+    needs: publish-version
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Restore local CoverageX artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: m2-coveragex
+          path: ~/.m2/repository/io/github/kd656
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Read Gradle plugin version
+        id: plugin-version
+        working-directory: coveragex/coveragex-gradle-plugin
+        run: |
+          version="$(./gradlew --no-daemon --quiet properties -Pproperty=version | awk -F': ' '/^version:/{print $2}')"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Gradle plugin version: ${version}"
+
+      - name: Check publishable snapshot version
+        id: publish-check
+        env:
+          PLUGIN_VERSION: ${{ steps.plugin-version.outputs.version }}
+        run: |
+          if [[ "${PLUGIN_VERSION}" != *-SNAPSHOT ]]; then
+            echo "::notice::Skipping Gradle plugin publish because ${PLUGIN_VERSION} is not a snapshot version."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish plugin + marker to Central Portal snapshots
+        if: steps.publish-check.outputs.publish == 'true'
+        working-directory: coveragex/coveragex-gradle-plugin
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.CENTRAL_PORTAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.CENTRAL_PORTAL_PASSWORD }}
+        run: ./gradlew --no-daemon publishToMavenCentral

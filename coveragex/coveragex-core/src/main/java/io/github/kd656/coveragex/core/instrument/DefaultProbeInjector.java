@@ -7,11 +7,14 @@ import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.RecordComponentVisitor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -87,6 +90,8 @@ public class DefaultProbeInjector implements ProbeInjector<byte[]> {
         private final String className;
         private final AtomicInteger probeCounter;
         private final List<ProbeMetadata> metadataAccumulator;
+        private boolean recordClass;
+        private final Map<String, String> recordComponents = new HashMap<>();
 
         ProbeInjectingClassVisitor(int api, ClassVisitor cv, String className,
                                    AtomicInteger probeCounter,
@@ -98,12 +103,27 @@ public class DefaultProbeInjector implements ProbeInjector<byte[]> {
         }
 
         @Override
+        public void visit(int version, int access, String name, String signature,
+                          String superName, String[] interfaces) {
+            recordClass = RecordMethods.isRecord(access);
+            super.visit(version, access, name, signature, superName, interfaces);
+        }
+
+        @Override
+        public RecordComponentVisitor visitRecordComponent(String name, String descriptor, String signature) {
+            if (recordClass) recordComponents.put(name, descriptor);
+            return super.visitRecordComponent(name, descriptor, signature);
+        }
+
+        @Override
         public MethodVisitor visitMethod(int access, String name, String descriptor,
                                         String signature, String[] exceptions) {
             MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
 
             // Skip abstract methods (no code to instrument)
-            if ((access & Opcodes.ACC_ABSTRACT) != 0 || mv == null) {
+            if ((access & Opcodes.ACC_ABSTRACT) != 0 || mv == null
+                    || (recordClass && RecordMethods.isGeneratedObjectMethod(name, descriptor))
+                    || (recordClass && RecordMethods.isComponentAccessorShape(name, descriptor, recordComponents))) {
                 return mv;
             }
 

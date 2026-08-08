@@ -368,19 +368,18 @@ abstract class ProbeInjectionSupport extends ProbeMetadataVisitor {
      * captured and the returned array has two entries in source order
      * (lhs first). When neither bit is set an empty array is returned.</p>
      *
-     * <p><b>Not handled:</b> long / double / float comparisons. javac emits
-     * those as {@code LCMP} / {@code DCMPL} / {@code FCMPL} (or the {@code *G}
-     * variants) followed by a single-int {@code IF*}. At the {@code IF*}
-     * site the stack holds the comparison result, not the original operands;
-     * capturing here would produce {@code -1}/{@code 0}/{@code 1} mislabelled
-     * as the original variable. The analyser filters these by setting
-     * {@code binaryCaptureMask = 0} when either side of the source
-     * expression is a long or floating-point literal (JavaParser's
-     * {@code DoubleLiteralExpr} covers both {@code double} and {@code float}
-     * literals — the suffix lives in {@code getValue()}, no separate
-     * {@code FloatLiteralExpr} exists). Variable-vs-variable
-     * long/double/float comparisons fall through this filter and produce a
-     * wrong captured value; see {@code potential-problems.md} for tracking.</p>
+     * <p><b>Category-2 comparisons ({@code long} / {@code double} / {@code float}).</b>
+     * javac emits those as {@code LCMP} / {@code DCMPL} / {@code FCMPL} (or the
+     * {@code *G} variants) followed by a single-int {@code IF*}. At the {@code IF*}
+     * site the stack holds the comparison result, not the original operands.
+     * The captured values for these comparisons therefore come from
+     * {@link #captureCategory2ComparisonOperands}, which runs at the preceding
+     * {@code CMP} instruction where both operands are still on the stack, and
+     * populates {@code pendingOperandLocals} before this method is reached.
+     * The {@code default} branch below additionally refuses to capture the
+     * single-int stack value when the source model expected two-operand capture
+     * — a defensive guard for the case where the CMP-time interceptor did not
+     * run (missing / mismatched source model).</p>
      *
      * @param opcode      the conditional-jump opcode
      * @param captureMask bitmask derived from {@link io.github.kd656.coveragex.core.analysis.source.model.OperandModel#binaryCaptureMask()}
@@ -475,7 +474,20 @@ abstract class ProbeInjectionSupport extends ProbeMetadataVisitor {
             }
             default -> {
                 // Single-operand int forms: IFEQ, IFNE, IFLT, IFGE, IFGT, IFLE.
-                // Stack: ..., value (int) — the single operand.
+                // Two source shapes reach here:
+                //   (a) `x != 0` / `x == 0` etc. — RHS is a filtered literal,
+                //       LHS is the int on the stack. captureMask == 1.
+                //   (b) `longA > longB`, `doubleS >= doubleT`, `floatX < floatY`
+                //       — the primary capture path for these is at the preceding
+                //       CMP instruction via
+                //       {@link #captureCategory2ComparisonOperands}, which sets
+                //       pendingOperandLocals before this method is reached, so
+                //       we normally don't get here. If we do (source model
+                //       absent / mismatched), fall back to no capture rather
+                //       than grabbing the -1/0/+1 CMP result.
+                if (captureMask != 1) {
+                    return new int[0];
+                }
                 int slot = nextLocalSlot++;
                 super.visitInsn(Opcodes.DUP);
                 super.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer",
@@ -484,6 +496,114 @@ abstract class ProbeInjectionSupport extends ProbeMetadataVisitor {
                 return new int[]{slot};
             }
         }
+    }
+
+    /**
+     * Captures both operands of a category-2 comparison ({@code LCMP},
+     * {@code DCMPL} / {@code DCMPG}, {@code FCMPL} / {@code FCMPG}) at the
+     * CMP instruction itself, before the CMP consumes them and reduces the
+     * pair to a single {@code int} result on the stack.
+     *
+     * <p>Emitted sequence for a {@code long/long} comparison (LCMP) with
+     * {@code captureMask == 3}:</p>
+     * <pre>
+     *   Stack on entry: ..., lhs (long), rhs (long)
+     *
+     *   LSTORE  slotRhsLong          ; consumes rhs; ..., lhs
+     *   LSTORE  slotLhsLong          ; consumes lhs; ...
+     *   LLOAD   slotLhsLong          ; ..., lhs
+     *   INVOKESTATIC Long.valueOf    ; ..., Long
+     *   ASTORE  slotLhsBoxed         ; ...
+     *   LLOAD   slotRhsLong          ; ..., rhs
+     *   INVOKESTATIC Long.valueOf    ; ..., Long
+     *   ASTORE  slotRhsBoxed         ; ...
+     *   LLOAD   slotLhsLong          ; ..., lhs
+     *   LLOAD   slotRhsLong          ; ..., lhs, rhs   (restored for CMP)
+     *
+     *   The caller then emits LCMP + the original IF*.
+     * </pre>
+     *
+     * <p>{@code DCMPL/DCMPG} use the {@code D*} instructions and
+     * {@code Double.valueOf}; {@code FCMPL/FCMPG} use the {@code F*}
+     * instructions and {@code Float.valueOf}. Long and double take two JVM
+     * local slots; float takes one — {@link #nextLocalSlot} is advanced
+     * accordingly so future allocations don't clobber the raw-value slots.</p>
+     *
+     * <p><b>Only {@code captureMask == 3} is meaningful.</b> The analyser sets
+     * mask to {@code 0} when either operand is a literal (in which case this
+     * method is not called); asymmetric masks ({@code 1} or {@code 2}) cannot
+     * arise for var-vs-var category-2 comparisons in practice, so this
+     * method returns an empty array for them defensively rather than emitting
+     * a partial-capture sequence.</p>
+     *
+     * @param cmpOpcode   the CMP opcode ({@code LCMP} / {@code DCMPL} /
+     *                    {@code DCMPG} / {@code FCMPL} / {@code FCMPG})
+     * @param captureMask capture mask from the source model
+     * @return the two boxed-value slot indices in {@code [lhs, rhs]} order,
+     *         or an empty array when capture is not performed
+     */
+    protected int[] captureCategory2ComparisonOperands(int cmpOpcode, int captureMask) {
+        if (captureMask != 0b11) {
+            return new int[0];
+        }
+        String boxOwner;
+        String boxDesc;
+        int loadOp;
+        int storeOp;
+        int rawSlotSize;
+        switch (cmpOpcode) {
+            case Opcodes.LCMP -> {
+                boxOwner = "java/lang/Long";
+                boxDesc  = "(J)Ljava/lang/Long;";
+                loadOp   = Opcodes.LLOAD;
+                storeOp  = Opcodes.LSTORE;
+                rawSlotSize = 2;
+            }
+            case Opcodes.DCMPL, Opcodes.DCMPG -> {
+                boxOwner = "java/lang/Double";
+                boxDesc  = "(D)Ljava/lang/Double;";
+                loadOp   = Opcodes.DLOAD;
+                storeOp  = Opcodes.DSTORE;
+                rawSlotSize = 2;
+            }
+            case Opcodes.FCMPL, Opcodes.FCMPG -> {
+                boxOwner = "java/lang/Float";
+                boxDesc  = "(F)Ljava/lang/Float;";
+                loadOp   = Opcodes.FLOAD;
+                storeOp  = Opcodes.FSTORE;
+                rawSlotSize = 1;
+            }
+            default -> {
+                return new int[0];
+            }
+        }
+
+        int slotLhsRaw = nextLocalSlot;
+        nextLocalSlot += rawSlotSize;
+        int slotRhsRaw = nextLocalSlot;
+        nextLocalSlot += rawSlotSize;
+        int slotLhsBoxed = nextLocalSlot++;
+        int slotRhsBoxed = nextLocalSlot++;
+
+        // Stack: ..., lhs, rhs → store rhs then lhs.
+        super.visitVarInsn(storeOp, slotRhsRaw);
+        super.visitVarInsn(storeOp, slotLhsRaw);
+
+        // Box lhs into slotLhsBoxed.
+        super.visitVarInsn(loadOp, slotLhsRaw);
+        super.visitMethodInsn(Opcodes.INVOKESTATIC, boxOwner, "valueOf", boxDesc, false);
+        super.visitVarInsn(Opcodes.ASTORE, slotLhsBoxed);
+
+        // Box rhs into slotRhsBoxed.
+        super.visitVarInsn(loadOp, slotRhsRaw);
+        super.visitMethodInsn(Opcodes.INVOKESTATIC, boxOwner, "valueOf", boxDesc, false);
+        super.visitVarInsn(Opcodes.ASTORE, slotRhsBoxed);
+
+        // Restore stack for the CMP that follows.
+        super.visitVarInsn(loadOp, slotLhsRaw);
+        super.visitVarInsn(loadOp, slotRhsRaw);
+
+        return new int[]{slotLhsBoxed, slotRhsBoxed};
     }
 
     /**
