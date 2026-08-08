@@ -54,7 +54,7 @@
         <slf4j.version>2.0.16</slf4j.version>
         <asm.version>9.9</asm.version>
         <javaparser.version>3.26.3</javaparser.version>
-        <jackson.version>2.22.0</jackson.version>
+        <jackson.version>2.22.1</jackson.version>
 
         <!-- Test dependency versions -->
         <junit-bom.version>5.11.4</junit-bom.version>
@@ -132,16 +132,12 @@
                 <version>${javaparser.version}</version>
             </dependency>
 
-            <!-- Jackson -->
             <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-databind</artifactId>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
                 <version>${jackson.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-annotations</artifactId>
-                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <!-- Maven Plugin API -->
