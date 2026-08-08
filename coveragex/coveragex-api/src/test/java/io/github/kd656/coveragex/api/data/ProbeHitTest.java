@@ -28,4 +28,25 @@ class ProbeHitTest {
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("count must be >= 0");
     }
+
+    @Test
+    void mergeSumsCountsForMatchingProbeId() {
+        ProbeHit merged = ProbeHit.merge(new ProbeHit(5, 3), new ProbeHit(5, 7));
+        assertThat(merged.probeId()).isEqualTo(5);
+        assertThat(merged.count()).isEqualTo(10);
+    }
+
+    @Test
+    void mergePreservesZeroCounts() {
+        ProbeHit merged = ProbeHit.merge(new ProbeHit(2, 0), new ProbeHit(2, 0));
+        assertThat(merged.wasHit()).isFalse();
+    }
+
+    @Test
+    void mergeRejectsMismatchedProbeIds() {
+        assertThatThrownBy(() -> ProbeHit.merge(new ProbeHit(1, 1), new ProbeHit(2, 1)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("probeId mismatch");
+    }
 }
+

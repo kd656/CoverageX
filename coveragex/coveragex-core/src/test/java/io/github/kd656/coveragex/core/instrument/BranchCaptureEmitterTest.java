@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration tests for Phase C operand-value capture.
+ * Integration tests for operand-value capture.
  *
  * <p>Each test instruments {@link BranchAttributionFixtures} with the
  * {@link SourceAwareProbeInjector}, backed by a {@link ClassModel} derived from
@@ -49,11 +49,10 @@ class BranchCaptureEmitterTest {
     private static final String FIXTURE_RESOURCE = FIXTURE_INTERNAL + ".class";
 
     /**
-     * Fully-qualified class name as the analyzer stores it in the {@link SemanticIndex}.
-     * {@link SourceCodeAnalyzer} uses {@code getFullyQualifiedName()} from JavaParser,
-     * which returns the dot-separated FQN.
+     * Internal-form class name as the analyzer stores it in the {@link SemanticIndex}
+     * (e.g. {@code io/github/.../BranchAttributionFixtures}).
      */
-    private static final String FIXTURE_FQN = BranchAttributionFixtures.class.getName();
+    private static final String FIXTURE_FQN = FIXTURE_INTERNAL;
 
     private CommonCoverageDataCollector collector;
     private SourceAwareProbeInjector injector;
@@ -136,8 +135,9 @@ class BranchCaptureEmitterTest {
                 .isNotEmpty();
         assertThat(invs).anySatisfy(inv ->
                 assertThat(inv.args())
-                        .as("captured operand value for 'methodCall(\"foo\")' must contain \"foo\"")
-                        .contains("foo"));
+                        .as("captured operand list for 'methodCall(\"foo\")' must be exactly [\"foo\"] — "
+                                + "one label ('s'), literal '.' filtered")
+                        .containsExactly("foo"));
     }
 
     // =========================================================================
@@ -163,8 +163,9 @@ class BranchCaptureEmitterTest {
                 .isNotEmpty();
         assertThat(invs).anySatisfy(inv ->
                 assertThat(inv.args())
-                        .as("captured operand for 'nullCheck(\"hello\")' must contain \"hello\"")
-                        .contains("hello"));
+                        .as("captured operand list for 'nullCheck(\"hello\")' must be exactly [\"hello\"] — "
+                                + "one label ('o'), null literal filtered")
+                        .containsExactly("hello"));
     }
 
     // =========================================================================
@@ -190,8 +191,86 @@ class BranchCaptureEmitterTest {
                 .isNotEmpty();
         assertThat(invs).anySatisfy(inv ->
                 assertThat(inv.args())
-                        .as("captured operand for 'binaryCompare(10)' must contain \"10\"")
-                        .contains("10"));
+                        .as("captured operand list for 'binaryCompare(10)' must be exactly [\"10\"] — "
+                                + "one label ('x'), literal 5 filtered")
+                        .containsExactly("10"));
+    }
+
+    // =========================================================================
+    // BINARY_COMPARE operand — category-2 var-vs-var (double / long / float)
+    // =========================================================================
+
+    /**
+     * For {@code double score >= double threshold}, javac emits
+     * {@code DLOAD; DLOAD; DCMPL; IFLT}. The analyser produces two operand
+     * labels ({@code [score, threshold]}) and asks for both to be captured
+     * ({@code binaryCaptureMask = 3}). Because the {@code IFLT} site sees
+     * only the collapsed {@code -1/0/+1} CMP result, capture is done at the
+     * preceding {@code DCMPL} instead — where both doubles are still on the
+     * stack.
+     *
+     * <p>Regression test for the bug where the branch coverage table showed
+     * {@code SCORE = 1 / -1} (the CMP result) and {@code THRESHOLD = --}.
+     * After the fix both columns must show the actual values.</p>
+     */
+    @Test
+    void doubleCompareVars_bothOperandsCapturedAtCmp() throws Exception {
+        ClassCoverage cc = runFixtureMethod(
+                "doubleCompareVars",
+                new Class[]{double.class, double.class},
+                new Object[]{1.5d, 1.0d});
+
+        List<AttributedInvocation> invs = allBranchInvocations(cc);
+        assertThat(invs)
+                .as("double-compare fixture must produce at least one attributed branch hit")
+                .isNotEmpty();
+        assertThat(invs).anySatisfy(inv ->
+                assertThat(inv.args())
+                        .as("captured operands for 'doubleCompareVars(1.5, 1.0)' must be "
+                                + "[score=1.5, threshold=1.0] — not the DCMPL result")
+                        .containsExactly("1.5", "1.0"));
+    }
+
+    /**
+     * For {@code long a > long b} (compiles to {@code LCMP; IFLE}), capture
+     * must happen at the {@code LCMP} site and record both long values.
+     */
+    @Test
+    void longCompareVars_bothOperandsCapturedAtCmp() throws Exception {
+        ClassCoverage cc = runFixtureMethod(
+                "longCompareVars",
+                new Class[]{long.class, long.class},
+                new Object[]{10L, 3L});
+
+        List<AttributedInvocation> invs = allBranchInvocations(cc);
+        assertThat(invs)
+                .as("long-compare fixture must produce at least one attributed branch hit")
+                .isNotEmpty();
+        assertThat(invs).anySatisfy(inv ->
+                assertThat(inv.args())
+                        .as("captured operands for 'longCompareVars(10, 3)' must be [10, 3]")
+                        .containsExactly("10", "3"));
+    }
+
+    /**
+     * For {@code float x < float y} (compiles to {@code FCMPG; IFGE}), capture
+     * must happen at the {@code FCMPG} site and record both float values.
+     */
+    @Test
+    void floatCompareVars_bothOperandsCapturedAtCmp() throws Exception {
+        ClassCoverage cc = runFixtureMethod(
+                "floatCompareVars",
+                new Class[]{float.class, float.class},
+                new Object[]{0.5f, 1.0f});
+
+        List<AttributedInvocation> invs = allBranchInvocations(cc);
+        assertThat(invs)
+                .as("float-compare fixture must produce at least one attributed branch hit")
+                .isNotEmpty();
+        assertThat(invs).anySatisfy(inv ->
+                assertThat(inv.args())
+                        .as("captured operands for 'floatCompareVars(0.5, 1.0)' must be [0.5, 1.0]")
+                        .containsExactly("0.5", "1.0"));
     }
 
     // =========================================================================
@@ -201,7 +280,7 @@ class BranchCaptureEmitterTest {
     /**
      * The {@link DefaultProbeInjector} path (no source map) must still produce
      * branch hits attributed to the correct test, but with an empty operand-values
-     * list — the Phase A baseline that Phase C must not break.
+     * list
      */
     @Test
     void defaultInjector_branchHitAttributedWithEmptyArgs() throws Exception {

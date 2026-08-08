@@ -6,11 +6,12 @@
 
     <groupId>io.github.kd656</groupId>
     <artifactId>coveragex</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>CoverageX</name>
     <description>Code coverage analysis tool with source-aware analysis, bytecode instrumentation, and rich reports to reveal line, branch, method, invocation, and test-level coverage gaps.</description>
+    <url>https://github.com/kd656/CoverageX</url>
 
     <licenses>
         <license>
@@ -19,6 +20,21 @@
             <distribution>repo</distribution>
         </license>
     </licenses>
+
+    <developers>
+        <developer>
+            <id>kd656</id>
+            <name>kd656</name>
+            <url>https://github.com/kd656</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/kd656/CoverageX.git</connection>
+        <developerConnection>scm:git:git@github.com:kd656/CoverageX.git</developerConnection>
+        <url>https://github.com/kd656/CoverageX</url>
+        <tag>HEAD</tag>
+    </scm>
 
     <distributionManagement>
         <snapshotRepository>
@@ -70,6 +86,12 @@
         <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
         <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
         <maven-deploy-plugin.version>3.1.4</maven-deploy-plugin.version>
+
+        <!-- Release-only plugins (activated by the `release` profile) -->
+        <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
+        <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
+        <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
+        <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
 
         <!-- Template engine -->
         <freemarker.version>2.3.33</freemarker.version>
@@ -252,6 +274,85 @@
       (otherwise -am child builds wouldn't see the overridden property).
     -->
     <profiles>
+        <!--
+          Release profile — activated with `-Prelease` for tagged/release-branch
+          builds only. It attaches the `-sources` and `-javadoc` jars, GPG-signs
+          every artifact, and routes `deploy` to the Central Portal (instead of the
+          snapshotRepository used by ordinary `main` snapshot deploys).
+
+          Not activeByDefault, so day-to-day `install`/`deploy` builds stay fast and
+          unsigned. Requires a GPG key + a `central` server token in settings.xml.
+        -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>${maven-source-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>${maven-javadoc-plugin.version}</version>
+                        <configuration>
+                            <!-- Central requires a javadoc jar; don't fail the release on lint. -->
+                            <doclint>none</doclint>
+                            <quiet>true</quiet>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven-gpg-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                                <configuration>
+                                    <!-- Non-interactive signing in CI (passphrase via env/settings). -->
+                                    <gpgArguments>
+                                        <arg>--pinentry-mode</arg>
+                                        <arg>loopback</arg>
+                                    </gpgArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central-publishing-maven-plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>false</autoPublish>
+                            <waitUntil>validated</waitUntil>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>fixtures-jdk21</id>
             <activation><activeByDefault>true</activeByDefault></activation>

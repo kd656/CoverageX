@@ -107,10 +107,28 @@
       transition: background .1s; user-select: none;
     }
     .nav-folder-row:hover { background: var(--bg-hover); color: var(--text); }
+    .nav-class-row { text-transform: none; letter-spacing: 0; }
+    /* Nested classes: mark direct children of a class-group with a ↳ prefix
+       so the reader can see the class-nesting relationship without relying
+       on indentation alone. */
+    .nav-class-group > .nav-folder-children > .nav-item > .nav-name::before,
+    .nav-class-group > .nav-folder-children > .nav-folder > .nav-folder-row > .nav-name::before {
+      content: "↳ ";
+      color: var(--text-muted);
+      margin-right: 2px;
+    }
     .nav-arrow { font-size: 8px; transition: transform .15s; min-width: 10px; }
     .nav-folder.open > .nav-folder-row .nav-arrow { transform: rotate(90deg); }
     .nav-folder-children { display: none; }
     .nav-folder.open > .nav-folder-children { display: block; }
+    /* Module-level nav rows (scoped reports) */
+    .nav-module-row {
+      font-weight: 600; letter-spacing: .5px;
+      background: rgba(255,255,255,.02);
+      border-top: 1px solid var(--border);
+    }
+    .nav-module:first-of-type .nav-module-row { border-top: none; }
+    .nav-module-row .nav-name { color: var(--text); }
     .nav-item {
       display: flex; align-items: center; gap: 8px;
       padding: 7px 0; padding-left: calc(12px + var(--depth) * 14px);
@@ -213,6 +231,29 @@
       cursor: pointer; padding: 2px 6px; border-radius: 4px; margin-left: auto;
     }
     .insight .line-ref:hover { background: var(--bg-hover); color: var(--text); }
+    /* Insight severity groups */
+    .insight-group { border-radius: var(--radius); overflow: hidden; }
+    .insight-group-head {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      padding: 6px 8px; background: rgba(255,255,255,.03);
+      border: none; color: var(--text); font-size: 12px; font-weight: 600;
+      cursor: pointer; text-align: left; border-radius: var(--radius);
+    }
+    .insight-group-head:hover { background: var(--bg-hover); }
+    .ig-caret { font-size: 9px; transition: transform .15s; min-width: 10px; }
+    .insight-group.open > .insight-group-head .ig-caret { transform: rotate(90deg); }
+    .ig-icon { min-width: 14px; text-align: center; }
+    .ig-label { flex: 1; }
+    .ig-count {
+      font-size: 11px; font-weight: 700; padding: 0 7px;
+      border-radius: 10px; background: rgba(255,255,255,.08); color: var(--text-muted);
+    }
+    .insight-group.C .ig-icon, .insight-group.C .ig-count { color: var(--badge-crit); }
+    .insight-group.W .ig-icon, .insight-group.W .ig-count { color: var(--badge-warn); }
+    .insight-group.I .ig-icon, .insight-group.I .ig-count { color: var(--badge-info); }
+    .insight-group.P .ig-icon, .insight-group.P .ig-count { color: var(--badge-pos); }
+    .insight-group-body { display: none; flex-direction: column; gap: 6px; padding-top: 6px; }
+    .insight-group.open > .insight-group-body { display: flex; }
     /* Source table */
     .source-view { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; }
     .source-view tr { transition: background .08s; }
@@ -461,7 +502,7 @@
 </head>
 <body>
 <@topbar.render model=report.topBar />
-<@nav.render tree=report.navTree />
+<@nav.render report=report />
 <main id="main">
   <div class="empty-state">
     <h2>Select a class</h2>
@@ -505,14 +546,17 @@ const CoverageX = {
     this._render(id, data);
   },
 
-  load(id) {
+  load(id, payloadPath) {
     this.requestedId = id;
     if (id === this.currentId) return;
     const cached = this.cache.get(id);
     if (cached) { this._render(id, cached); return; }
     this._showSpinner();
     const s = document.createElement('script');
-    s.src = 'classes/' + id + '.data.js';
+    // payloadPath comes from data-payload on the nav item (scoped reports use
+    // classes/<scopeId>/<sectionId>.data.js). Fall back to the flat layout when
+    // the caller did not pass one — e.g. a bookmarked call from user code.
+    s.src = payloadPath || ('classes/' + id + '.data.js');
     s.onerror = () => {
       if (this.requestedId === id) this._showError(id);
     };
@@ -559,18 +603,47 @@ const CoverageX = {
 
   _buildInsights(insights, sectionId) {
     if (!insights || !insights.length) return '';
-    const icons = {C:'✕', W:'!', I:'i', P:'✓'};
-    const rows = insights.map(ins => {
-      const lineRef = ins.line > 0
-        ? '<span class="line-ref" onclick="jumpToLine(\'' + esc(sectionId) + '\',' + ins.line + ')">line ' + ins.line + '</span>'
-        : '';
-      return '<div class="insight ' + esc(ins.sev) + '">'
-        + '<span class="icon">' + (icons[ins.sev] || '?') + '</span>'
-        + '<div class="body"><div class="title">' + esc(ins.msg) + '</div>'
-        + '<div class="detail">' + esc(ins.hint) + '</div></div>'
-        + lineRef + '</div>';
+    const meta = {
+      C: { label: 'Critical', icon: '✕', open: false },
+      W: { label: 'Warning',  icon: '!', open: false },
+      I: { label: 'Info',     icon: 'i', open: false },
+      P: { label: 'Optimal',  icon: '✓', open: false },
+    };
+    const order = ['C', 'W', 'I', 'P'];
+
+    // Bucket by severity, preserving the arrival order (line then severity)
+    // within each bucket.
+    const groups = { C: [], W: [], I: [], P: [] };
+    for (const ins of insights) (groups[ins.sev] || groups.I).push(ins);
+
+    const sections = order.filter(sev => groups[sev].length).map(sev => {
+      const g = meta[sev];
+      const rows = groups[sev].map(ins => this._buildInsightRow(ins, sectionId)).join('');
+      const openCls = g.open ? ' open' : '';
+      return '<div class="insight-group ' + sev + openCls + '">'
+        + '<button type="button" class="insight-group-head" onclick="toggleInsightGroup(this)">'
+        + '<span class="ig-caret">▸</span>'
+        + '<span class="ig-icon">' + g.icon + '</span>'
+        + '<span class="ig-label">' + g.label + '</span>'
+        + '<span class="ig-count">' + groups[sev].length + '</span>'
+        + '</button>'
+        + '<div class="insight-group-body">' + rows + '</div>'
+        + '</div>';
     }).join('');
-    return '<div class="insights-panel">' + rows + '</div>';
+
+    return '<div class="insights-panel">' + sections + '</div>';
+  },
+
+  _buildInsightRow(ins, sectionId) {
+    const icons = {C:'✕', W:'!', I:'i', P:'✓'};
+    const lineRef = ins.line > 0
+      ? '<span class="line-ref" onclick="jumpToLine(\'' + esc(sectionId) + '\',' + ins.line + ')">line ' + ins.line + '</span>'
+      : '';
+    return '<div class="insight ' + esc(ins.sev) + '">'
+      + '<span class="icon">' + (icons[ins.sev] || '?') + '</span>'
+      + '<div class="body"><div class="title">' + esc(ins.msg) + '</div>'
+      + '<div class="detail">' + esc(ins.hint) + '</div></div>'
+      + lineRef + '</div>';
   },
 
   _buildSourceTable(lines, sectionId) {
@@ -944,8 +1017,8 @@ function jumpNextUncovered() {
 }
 
 /* ===== Load class entry point ===== */
-function loadClass(id) {
-  CoverageX.load(id);
+function loadClass(id, payloadPath) {
+  CoverageX.load(id, payloadPath);
 }
 
 /* ===== Prev / Next navigation ===== */
@@ -954,15 +1027,21 @@ function getClassOrder() {
     .map(el => el.dataset.section);
 }
 function navigateRelative(delta) {
-  const order = getClassOrder();
-  const idx = order.indexOf(CoverageX.currentId);
+  const items = [...document.querySelectorAll('#nav-list .nav-item[data-section]')];
+  const idx = items.findIndex(el => el.dataset.section === CoverageX.currentId);
   const next = idx + delta;
-  if (next >= 0 && next < order.length) loadClass(order[next]);
+  if (next >= 0 && next < items.length) {
+    loadClass(items[next].dataset.section, items[next].dataset.payload);
+  }
 }
 
 /* ===== Tree navigation ===== */
 function toggleNavFolder(row) {
   row.closest('.nav-folder').classList.toggle('open');
+}
+
+function toggleInsightGroup(headEl) {
+  headEl.closest('.insight-group').classList.toggle('open');
 }
 
 function setActiveNav(id) {
